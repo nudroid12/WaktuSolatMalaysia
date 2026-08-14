@@ -28,7 +28,7 @@ class JakimPrayerRepository(private val context: Context) {
                 connectTimeout = 15_000
                 readTimeout = 15_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "WaktuSolatMalaysia/0.1.0 (NudroidLabs)")
+                setRequestProperty("User-Agent", "WaktuSolatMalaysia/0.2.0 (NudroidLabs)")
                 useCaches = false
             }
 

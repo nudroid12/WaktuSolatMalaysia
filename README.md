@@ -1,35 +1,45 @@
 # Waktu Solat Malaysia
 
-Developer: **NudroidLabs**  
-Application ID: `app.nudroidlabs.waktusolat`  
-M1 version: `0.1.0`
-
-## M1 scope
-
-- Reads prayer schedules directly from the official JAKIM e-Solat domain.
-- Shows Imsak, Subuh, Syuruk, Duha, Zohor, Asar, Maghrib and Isyak.
-- Shows the next obligatory prayer and a live countdown.
-- Includes the 60 zone codes currently listed on JAKIM e-Solat's zone table.
-- Saves the selected zone locally.
-- Caches the latest successful weekly response for resilience when the network is unavailable.
-- Shows JAKIM server time and zone qibla bearing returned by the source.
+Developer: NudroidLabs
+Application ID: `app.nudroidlabs.waktusolat`
+Current milestone: M2
+Version: `0.2.0`
 
 ## Data source
 
-Official JAKIM e-Solat endpoint used by the app:
+Prayer schedules are read from the official JAKIM e-Solat domain:
 
 `https://www.e-solat.gov.my/index.php?r=esolatApi/TakwimSolat&period=week&zone=WLY01`
 
 The zone code is replaced with the user's selected JAKIM zone.
 
-Important: the endpoint is publicly reachable on JAKIM's official domain, but it is not presented on the e-Solat site as a formally documented public developer API. Therefore the app validates the returned status, zone and time fields, and caches the last valid response.
+The endpoint is publicly reachable on JAKIM's official domain, but it is not presented on the e-Solat site as a formally documented public developer API. The app validates the returned status, zone and time fields, then caches the last valid response.
 
-## Build on GitHub Actions
+## M2 scope
 
-Upload the project to a GitHub repository and run **Actions > Android Build > Run workflow**. A successful build uploads `Waktu-Solat-Malaysia-debug` as an Actions artifact containing the debug APK.
+- Imsak, Subuh, Syuruk, Duha, Zohor, Asar, Maghrib and Isyak from e-Solat JAKIM.
+- Live next-prayer countdown.
+- 60 JAKIM zone codes.
+- Manual zone selection remains available at all times.
+- User-triggered location detection using Android location and reverse geocoding.
+- Location detection produces a zone suggestion only when the administrative address maps uniquely to the official JAKIM zone names.
+- Ambiguous results are not guessed and do not silently change the selected zone.
+- Optional prayer notifications for Subuh, Zohor, Asar, Maghrib and Isyak.
+- Per-prayer notification switches.
+- Android 13+ notification runtime permission handling.
+- Android 12+ exact-alarm access handling, with inexact fallback if exact access is unavailable.
+- Future prayer alarms are rebuilt after time changes, timezone changes, reboot, or exact-alarm permission changes.
+- WorkManager refreshes the JAKIM schedule periodically so future alarms remain populated.
+- Weekly response cache remains available if the network is temporarily unavailable.
 
-The workflow uses JDK 17, Gradle 9.4.1, Android API 37 and Build Tools 36.0.0.
+## Location accuracy note
 
-## Next milestone
+JAKIM prayer schedules use administrative prayer zones, including several special or split zones. This project does not use a nearest-coordinate approximation. Android reverse geocoding is used to obtain administrative place names, then those names are matched against the official JAKIM zone list. If a unique match cannot be established, the user must select the zone manually.
 
-M2 should add exact automatic zone detection, notification scheduling and azan behaviour. Automatic GPS-to-zone mapping is intentionally not guessed in M1 because JAKIM schedules are zone/district based and accuracy is more important than an approximate nearest-zone selection.
+## Notification accuracy note
+
+Exact alarms require special access on recent Android versions. If the user has not granted exact-alarm access, Android may deliver reminders later than the precise prayer-time minute. The app exposes this state and provides a shortcut to the system setting.
+
+## Build
+
+The project targets Android API 36 with JDK 17 and Gradle 9.4.1. GitHub Actions runs unit tests before assembling the debug APK.
