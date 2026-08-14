@@ -5,13 +5,11 @@ import android.content.Context
 import android.location.Address
 import android.location.Geocoder
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
-import android.os.Build
-import android.os.Bundle
 import android.os.CancellationSignal
-import android.os.Looper
 import androidx.core.content.edit
+import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import app.nudroidlabs.waktusolat.data.PrayerZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -121,64 +119,31 @@ class LocationZoneDetector(private val context: Context) {
             else -> LocationManager.GPS_PROVIDER
         }
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            suspendCancellableCoroutine { continuation ->
-                val signal = CancellationSignal()
-                locationManager.getCurrentLocation(
-                    provider,
-                    signal,
-                    context.mainExecutor
-                ) { location ->
-                    if (!continuation.isActive) return@getCurrentLocation
-                    if (location != null) {
-                        continuation.resume(location)
-                    } else {
-                        continuation.resumeWithException(
-                            IllegalStateException("Lokasi semasa tidak dapat diperoleh.")
-                        )
-                    }
-                }
-                continuation.invokeOnCancellation { signal.cancel() }
-            }
-        } else {
-            suspendCancellableCoroutine { continuation ->
-                val listener = object : LocationListener {
-                    override fun onLocationChanged(location: Location) {
-                        locationManager.removeUpdates(this)
-                        if (continuation.isActive) continuation.resume(location)
-                    }
-
-                    @Deprecated("Deprecated in Android")
-                    override fun onStatusChanged(
-                        provider: String?,
-                        status: Int,
-                        extras: Bundle?
-                    ) = Unit
-
-                    override fun onProviderEnabled(provider: String) = Unit
-
-                    override fun onProviderDisabled(provider: String) {
-                        if (continuation.isActive) {
-                            locationManager.removeUpdates(this)
-                            continuation.resumeWithException(
-                                IllegalStateException("Perkhidmatan lokasi telah dimatikan.")
-                            )
-                        }
-                    }
-                }
-
-                locationManager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
-                continuation.invokeOnCancellation {
-                    runCatching { locationManager.removeUpdates(listener) }
+        return suspendCancellableCoroutine { continuation ->
+            val signal = CancellationSignal()
+            LocationManagerCompat.getCurrentLocation(
+                locationManager,
+                provider,
+                signal,
+                ContextCompat.getMainExecutor(context)
+            ) { location ->
+                if (!continuation.isActive) return@getCurrentLocation
+                if (location != null) {
+                    continuation.resume(location)
+                } else {
+                    continuation.resumeWithException(
+                        IllegalStateException("Lokasi semasa tidak dapat diperoleh.")
+                    )
                 }
             }
+            continuation.invokeOnCancellation { signal.cancel() }
         }
     }
 
     @Suppress("DEPRECATION")
     private suspend fun reverseGeocode(location: Location): Address? = withContext(Dispatchers.IO) {
         if (!Geocoder.isPresent()) return@withContext null
-        val geocoder = Geocoder(context, Locale("ms", "MY"))
+        val geocoder = Geocoder(context, Locale.forLanguageTag("ms-MY"))
         geocoder.getFromLocation(location.latitude, location.longitude, 1)
             ?.firstOrNull()
     }

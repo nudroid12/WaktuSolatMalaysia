@@ -278,4 +278,4 @@ private fun QiblaCompassCard(
 }
 
 private fun formatLocationTime(millis: Long): String =
-    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("ms", "MY")).format(Date(millis))
+    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("ms-MY")).format(Date(millis))

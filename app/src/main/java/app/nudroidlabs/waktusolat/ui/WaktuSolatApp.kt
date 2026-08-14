@@ -23,7 +23,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import app.nudroidlabs.waktusolat.audio.AzanPlaybackService
 import app.nudroidlabs.waktusolat.audio.AzanPreferences
 import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
 import app.nudroidlabs.waktusolat.data.PrayerDataOrigin
@@ -41,6 +41,7 @@ import app.nudroidlabs.waktusolat.location.LocationZoneDetector
 import app.nudroidlabs.waktusolat.location.SavedLocation
 import app.nudroidlabs.waktusolat.location.ZoneSuggestion
 import app.nudroidlabs.waktusolat.notification.PrayerAlarmScheduler
+import app.nudroidlabs.waktusolat.notification.PrayerAlertStyle
 import app.nudroidlabs.waktusolat.notification.PrayerRefreshWorker
 
 private val DarkColours = darkColorScheme(
@@ -71,7 +72,7 @@ enum class AppTab(val label: String, val shortLabel: String) {
 }
 
 @Composable
-fun WaktuSolatApp() {
+fun WaktuSolatApp(resumeToken: Int = 0) {
     val context = LocalContext.current.applicationContext
     var appearanceMode by remember { mutableStateOf(AppearancePreferences.mode(context)) }
     val systemDark = isSystemInDarkTheme()
@@ -85,6 +86,7 @@ fun WaktuSolatApp() {
         Surface(modifier = Modifier.fillMaxSize()) {
             PrayerAppShell(
                 appearanceMode = appearanceMode,
+                resumeToken = resumeToken,
                 onAppearanceModeChange = { mode ->
                     AppearancePreferences.setMode(context, mode)
                     appearanceMode = mode
@@ -97,6 +99,7 @@ fun WaktuSolatApp() {
 @Composable
 private fun PrayerAppShell(
     appearanceMode: AppearanceMode,
+    resumeToken: Int,
     onAppearanceModeChange: (AppearanceMode) -> Unit
 ) {
     val context = LocalContext.current
@@ -131,11 +134,23 @@ private fun PrayerAppShell(
             }
         )
     }
-    var leadMinutes by remember {
-        mutableIntStateOf(PrayerAlarmScheduler.leadMinutes(appContext))
+    var leadMinutesByPrayer by remember {
+        mutableStateOf(
+            PrayerAlarmScheduler.prayerNames.associateWith {
+                PrayerAlarmScheduler.leadMinutes(appContext, it)
+            }
+        )
     }
+    var alertStyle by remember { mutableStateOf(PrayerAlarmScheduler.alertStyle(appContext)) }
     var azanEnabled by remember { mutableStateOf(AzanPreferences.enabled(appContext)) }
     var azanUri by remember { mutableStateOf(AzanPreferences.audioUri(appContext)) }
+    var azanEnabledPrayers by remember {
+        mutableStateOf(
+            PrayerAlarmScheduler.prayerNames.associateWith {
+                AzanPreferences.prayerEnabled(appContext, it)
+            }
+        )
+    }
     var settingsRevision by remember { mutableLongStateOf(0L) }
     var scheduleMessage by remember { mutableStateOf<String?>(null) }
 
@@ -222,7 +237,7 @@ private fun PrayerAppShell(
         notificationsEnabled = enabled
         PrayerAlarmScheduler.setNotificationsEnabled(appContext, enabled)
         if (enabled) {
-            PrayerAlarmScheduler.createNotificationChannel(appContext)
+            PrayerAlarmScheduler.createNotificationChannels(appContext)
             PrayerRefreshWorker.ensureScheduled(appContext)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 !PrayerAlarmScheduler.hasNotificationPermission(appContext)
@@ -230,8 +245,11 @@ private fun PrayerAppShell(
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         } else {
-            PrayerRefreshWorker.cancel(appContext)
             scheduleMessage = "Notifikasi dimatikan."
+            if (!PrayerAlarmScheduler.scheduleNeeded(appContext)) {
+                PrayerAlarmScheduler.cancelAll(appContext)
+                PrayerRefreshWorker.cancel(appContext)
+            }
         }
         settingsRevision++
     }
@@ -248,7 +266,7 @@ private fun PrayerAppShell(
             }
     }
 
-    LaunchedEffect(zoneCode, reloadNonce) {
+    LaunchedEffect(zoneCode, reloadNonce, resumeToken) {
         loading = true
         error = null
         val forceRefresh = reloadNonce > lastHandledRefreshNonce
@@ -291,18 +309,32 @@ private fun PrayerAppShell(
 
     LaunchedEffect(data, zoneCode, settingsRevision) {
         val current = data ?: return@LaunchedEffect
-        if (!PrayerAlarmScheduler.notificationsEnabled(appContext)) {
+        if (!PrayerAlarmScheduler.scheduleNeeded(appContext)) {
             PrayerAlarmScheduler.cancelAll(appContext)
+            PrayerRefreshWorker.cancel(appContext)
+            scheduleMessage = if (AzanPreferences.enabled(appContext) &&
+                !PrayerAlarmScheduler.canScheduleExact(appContext)
+            ) {
+                "Azan penuh menunggu akses alarm tepat."
+            } else if (!PrayerAlarmScheduler.notificationsEnabled(appContext)) {
+                "Tiada peringatan aktif."
+            } else {
+                scheduleMessage
+            }
             return@LaunchedEffect
         }
 
         PrayerRefreshWorker.ensureScheduled(appContext)
         val report = PrayerAlarmScheduler.reschedule(appContext, current.days, zoneCode)
         scheduleMessage = when {
-            !PrayerAlarmScheduler.hasNotificationPermission(appContext) ->
-                "Kebenaran notifikasi belum diberikan."
+            PrayerAlarmScheduler.notificationsEnabled(appContext) &&
+                !PrayerAlarmScheduler.hasNotificationPermission(appContext) ->
+                "Jadual disediakan, tetapi kebenaran notifikasi belum diberikan."
+            AzanPreferences.enabled(appContext) &&
+                !PrayerAlarmScheduler.canScheduleExact(appContext) ->
+                "Notifikasi dijadualkan. Azan penuh menunggu akses alarm tepat."
             report.exact ->
-                "${report.scheduledCount} peringatan akan datang dijadualkan."
+                "${report.scheduledCount} peringatan akan datang dijadualkan tepat."
             else ->
                 "${report.scheduledCount} peringatan dijadualkan secara anggaran. " +
                     "Benarkan alarm tepat untuk ketepatan terbaik."
@@ -310,8 +342,8 @@ private fun PrayerAppShell(
     }
 
     LaunchedEffect(Unit) {
-        PrayerAlarmScheduler.createNotificationChannel(appContext)
-        if (PrayerAlarmScheduler.notificationsEnabled(appContext)) {
+        PrayerAlarmScheduler.createNotificationChannels(appContext)
+        if (PrayerAlarmScheduler.scheduleNeeded(appContext)) {
             PrayerRefreshWorker.ensureScheduled(appContext)
         }
     }
@@ -378,12 +410,14 @@ private fun PrayerAppShell(
                 zoneSuggestion = zoneSuggestion,
                 notificationsEnabled = notificationsEnabled,
                 enabledPrayers = enabledPrayers,
-                leadMinutes = leadMinutes,
+                leadMinutesByPrayer = leadMinutesByPrayer,
+                alertStyle = alertStyle,
                 hasNotificationPermission = PrayerAlarmScheduler.hasNotificationPermission(appContext),
                 hasExactAlarmAccess = PrayerAlarmScheduler.canScheduleExact(appContext),
                 scheduleMessage = scheduleMessage,
                 azanEnabled = azanEnabled,
                 azanAudioName = audioName,
+                azanEnabledPrayers = azanEnabledPrayers,
                 onChooseZone = { showZones = true },
                 onThemeModeChange = onAppearanceModeChange,
                 onDetectLocation = ::requestLocationDetection,
@@ -394,9 +428,16 @@ private fun PrayerAppShell(
                     enabledPrayers = enabledPrayers.toMutableMap().apply { put(prayer, enabled) }
                     settingsRevision++
                 },
-                onLeadMinutesChange = { minutes ->
-                    PrayerAlarmScheduler.setLeadMinutes(appContext, minutes)
-                    leadMinutes = minutes
+                onLeadMinutesChange = { prayer, minutes ->
+                    PrayerAlarmScheduler.setLeadMinutes(appContext, prayer, minutes)
+                    leadMinutesByPrayer = leadMinutesByPrayer.toMutableMap().apply {
+                        put(prayer, minutes)
+                    }
+                    settingsRevision++
+                },
+                onAlertStyleChange = { style ->
+                    PrayerAlarmScheduler.setAlertStyle(appContext, style)
+                    alertStyle = style
                     settingsRevision++
                 },
                 onRequestNotificationPermission = {
@@ -405,13 +446,42 @@ private fun PrayerAppShell(
                     }
                 },
                 onRequestExactAlarm = ::requestExactAlarmAccess,
+                onOpenNotificationSettings = {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    runCatching { context.startActivity(intent) }
+                        .onFailure {
+                            scheduleMessage = "Tetapan notifikasi Android tidak dapat dibuka."
+                        }
+                },
                 onPickAzanAudio = { audioPicker.launch(arrayOf("audio/*")) },
                 onAzanEnabledChange = { enabled ->
                     AzanPreferences.setEnabled(appContext, enabled)
                     azanEnabled = enabled
+                    if (enabled && PrayerAlarmScheduler.canScheduleExact(appContext)) {
+                        PrayerRefreshWorker.ensureScheduled(appContext)
+                    } else if (!enabled && !PrayerAlarmScheduler.notificationsEnabled(appContext)) {
+                        PrayerAlarmScheduler.cancelAll(appContext)
+                        PrayerRefreshWorker.cancel(appContext)
+                    }
                     settingsRevision++
                 },
+                onAzanPrayerChange = { prayer, enabled ->
+                    AzanPreferences.setPrayerEnabled(appContext, prayer, enabled)
+                    azanEnabledPrayers = azanEnabledPrayers.toMutableMap().apply {
+                        put(prayer, enabled)
+                    }
+                    settingsRevision++
+                },
+                onTestAzan = {
+                    if (!AzanPreferences.audioUri(appContext).isNullOrBlank()) {
+                        runCatching { AzanPlaybackService.preview(appContext) }
+                            .onFailure { scheduleMessage = "Ujian azan tidak dapat dimulakan." }
+                    }
+                },
+                onStopAzan = { AzanPlaybackService.stop(appContext) },
                 onClearAzanAudio = {
+                    AzanPlaybackService.stop(appContext)
                     AzanPreferences.clearAudioUri(appContext)
                     azanUri = null
                     azanEnabled = false

@@ -17,7 +17,7 @@ class PrayerRefreshWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        if (!PrayerAlarmScheduler.notificationsEnabled(applicationContext)) {
+        if (!PrayerAlarmScheduler.scheduleNeeded(applicationContext)) {
             return Result.success()
         }
 

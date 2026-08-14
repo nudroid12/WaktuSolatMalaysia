@@ -1,6 +1,7 @@
 package app.nudroidlabs.waktusolat.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,9 +28,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nudroidlabs.waktusolat.BuildConfig
 import app.nudroidlabs.waktusolat.data.JakimZones
 import app.nudroidlabs.waktusolat.location.ZoneSuggestion
 import app.nudroidlabs.waktusolat.notification.PrayerAlarmScheduler
+import app.nudroidlabs.waktusolat.notification.PrayerAlertStyle
 
 @Composable
 fun SettingsScreen(
@@ -40,23 +44,30 @@ fun SettingsScreen(
     zoneSuggestion: ZoneSuggestion?,
     notificationsEnabled: Boolean,
     enabledPrayers: Map<String, Boolean>,
-    leadMinutes: Int,
+    leadMinutesByPrayer: Map<String, Int>,
+    alertStyle: PrayerAlertStyle,
     hasNotificationPermission: Boolean,
     hasExactAlarmAccess: Boolean,
     scheduleMessage: String?,
     azanEnabled: Boolean,
     azanAudioName: String?,
+    azanEnabledPrayers: Map<String, Boolean>,
     onChooseZone: () -> Unit,
     onThemeModeChange: (AppearanceMode) -> Unit,
     onDetectLocation: () -> Unit,
     onUseSuggestion: (ZoneSuggestion) -> Unit,
     onMasterNotificationChange: (Boolean) -> Unit,
     onPrayerChange: (String, Boolean) -> Unit,
-    onLeadMinutesChange: (Int) -> Unit,
+    onLeadMinutesChange: (String, Int) -> Unit,
+    onAlertStyleChange: (PrayerAlertStyle) -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onRequestExactAlarm: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
     onPickAzanAudio: () -> Unit,
     onAzanEnabledChange: (Boolean) -> Unit,
+    onAzanPrayerChange: (String, Boolean) -> Unit,
+    onTestAzan: () -> Unit,
+    onStopAzan: () -> Unit,
     onClearAzanAudio: () -> Unit
 ) {
     val zone = JakimZones.byCode(zoneCode)
@@ -69,18 +80,14 @@ fun SettingsScreen(
         item {
             Column {
                 Text("Tetapan", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text("Waktu Solat Malaysia 0.5.0", color = MaterialTheme.colorScheme.primary)
+                Text("Waktu Solat Malaysia ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.primary)
             }
         }
 
         item { SectionLabel("Paparan") }
-
-        item {
-            AppearanceCard(mode = themeMode, onModeChange = onThemeModeChange)
-        }
+        item { AppearanceCard(mode = themeMode, onModeChange = onThemeModeChange) }
 
         item { SectionLabel("Lokasi dan zon") }
-
         item {
             Card(
                 modifier = Modifier
@@ -110,39 +117,43 @@ fun SettingsScreen(
         }
 
         item { SectionLabel("Peringatan") }
-
         item {
             NotificationSettingsCard(
                 masterEnabled = notificationsEnabled,
                 prayerEnabled = enabledPrayers,
-                leadMinutes = leadMinutes,
+                leadMinutesByPrayer = leadMinutesByPrayer,
+                alertStyle = alertStyle,
                 hasNotificationPermission = hasNotificationPermission,
                 hasExactAlarmAccess = hasExactAlarmAccess,
                 status = scheduleMessage,
                 onMasterChange = onMasterNotificationChange,
                 onPrayerChange = onPrayerChange,
                 onLeadMinutesChange = onLeadMinutesChange,
+                onAlertStyleChange = onAlertStyleChange,
                 onRequestNotificationPermission = onRequestNotificationPermission,
-                onRequestExactAlarm = onRequestExactAlarm
+                onRequestExactAlarm = onRequestExactAlarm,
+                onOpenNotificationSettings = onOpenNotificationSettings
             )
         }
 
         item { SectionLabel("Azan") }
-
         item {
             AzanSettingsCard(
                 enabled = azanEnabled,
                 audioName = azanAudioName,
+                prayerEnabled = azanEnabledPrayers,
                 hasExactAlarmAccess = hasExactAlarmAccess,
                 onEnabledChange = onAzanEnabledChange,
+                onPrayerChange = onAzanPrayerChange,
                 onPickAudio = onPickAzanAudio,
+                onTestAudio = onTestAzan,
+                onStopAudio = onStopAzan,
                 onClearAudio = onClearAzanAudio,
                 onRequestExactAlarm = onRequestExactAlarm
             )
         }
 
         item { SectionLabel("Tentang aplikasi") }
-
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -205,15 +216,18 @@ private fun AppearanceCard(
 private fun NotificationSettingsCard(
     masterEnabled: Boolean,
     prayerEnabled: Map<String, Boolean>,
-    leadMinutes: Int,
+    leadMinutesByPrayer: Map<String, Int>,
+    alertStyle: PrayerAlertStyle,
     hasNotificationPermission: Boolean,
     hasExactAlarmAccess: Boolean,
     status: String?,
     onMasterChange: (Boolean) -> Unit,
     onPrayerChange: (String, Boolean) -> Unit,
-    onLeadMinutesChange: (Int) -> Unit,
+    onLeadMinutesChange: (String, Int) -> Unit,
+    onAlertStyleChange: (PrayerAlertStyle) -> Unit,
     onRequestNotificationPermission: () -> Unit,
-    onRequestExactAlarm: () -> Unit
+    onRequestExactAlarm: () -> Unit,
+    onOpenNotificationSettings: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -227,7 +241,7 @@ private fun NotificationSettingsCard(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("Notifikasi waktu solat", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text("Peringatan masuk waktu untuk solat fardu.", fontSize = 12.sp)
+                    Text("Kawalan berasingan untuk setiap solat fardu.", fontSize = 12.sp)
                 }
                 Switch(checked = masterEnabled, onCheckedChange = onMasterChange)
             }
@@ -251,18 +265,20 @@ private fun NotificationSettingsCard(
                     )
                 }
 
-                Text("Peringatan awal", fontWeight = FontWeight.SemiBold)
-                Text("Pilih peringatan sebelum masuk waktu jika diperlukan.", fontSize = 12.sp)
+                Text("Gaya peringatan", fontWeight = FontWeight.SemiBold)
+                Text("Tetapan Android untuk channel masih mempunyai keutamaan akhir.", fontSize = 12.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PrayerAlarmScheduler.supportedLeadMinutes.forEach { minutes ->
+                    PrayerAlertStyle.entries.forEach { style ->
                         FilterChip(
-                            selected = leadMinutes == minutes,
-                            onClick = { onLeadMinutesChange(minutes) },
-                            label = { Text(if (minutes == 0) "Tiada" else "$minutes m") }
+                            selected = alertStyle == style,
+                            onClick = { onAlertStyleChange(style) },
+                            label = { Text(style.label) }
                         )
                     }
                 }
@@ -272,18 +288,44 @@ private fun NotificationSettingsCard(
                 Spacer(Modifier.height(6.dp))
 
                 PrayerAlarmScheduler.prayerNames.forEachIndexed { index, prayer ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(prayer)
-                        Switch(
-                            checked = prayerEnabled[prayer] != false,
-                            onCheckedChange = { onPrayerChange(prayer, it) }
-                        )
+                    val enabled = prayerEnabled[prayer] != false
+                    Column(Modifier.padding(vertical = 7.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(prayer, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    if (enabled) "Peringatan dihidupkan" else "Peringatan dimatikan",
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = enabled,
+                                onCheckedChange = { onPrayerChange(prayer, it) }
+                            )
+                        }
+
+                        if (enabled) {
+                            Spacer(Modifier.height(6.dp))
+                            Text("Peringatan awal", fontSize = 12.sp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                PrayerAlarmScheduler.supportedLeadMinutes.forEach { minutes ->
+                                    FilterChip(
+                                        selected = leadMinutesByPrayer[prayer] == minutes,
+                                        onClick = { onLeadMinutesChange(prayer, minutes) },
+                                        label = { Text(if (minutes == 0) "Tiada" else "$minutes m") }
+                                    )
+                                }
+                            }
+                        }
                     }
                     if (index != PrayerAlarmScheduler.prayerNames.lastIndex) {
                         HorizontalDivider()
@@ -293,6 +335,11 @@ private fun NotificationSettingsCard(
                 status?.let {
                     Spacer(Modifier.height(10.dp))
                     Text(it, fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = onOpenNotificationSettings) {
+                    Text("Tetapan notifikasi Android")
                 }
             }
         }
@@ -315,9 +362,13 @@ private fun PermissionMessage(
 private fun AzanSettingsCard(
     enabled: Boolean,
     audioName: String?,
+    prayerEnabled: Map<String, Boolean>,
     hasExactAlarmAccess: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    onPrayerChange: (String, Boolean) -> Unit,
     onPickAudio: () -> Unit,
+    onTestAudio: () -> Unit,
+    onStopAudio: () -> Unit,
     onClearAudio: () -> Unit,
     onRequestExactAlarm: () -> Unit
 ) {
@@ -335,7 +386,7 @@ private fun AzanSettingsCard(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("Azan penuh", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text("Gunakan fail audio pilihan sendiri.", fontSize = 12.sp)
+                    Text("Gunakan fail audio pilihan sendiri dan pilih solat yang memainkannya.", fontSize = 12.sp)
                 }
                 Switch(
                     checked = enabled && hasAudio,
@@ -349,7 +400,14 @@ private fun AzanSettingsCard(
             if (hasAudio) {
                 Text("Audio: $audioName", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(onClick = onTestAudio) { Text("Uji azan") }
+                    OutlinedButton(onClick = onStopAudio) { Text("Henti") }
                     OutlinedButton(onClick = onPickAudio) { Text("Tukar audio") }
                     OutlinedButton(onClick = onClearAudio) { Text("Buang") }
                 }
@@ -357,10 +415,34 @@ private fun AzanSettingsCard(
                 Button(onClick = onPickAudio) { Text("Pilih fail azan") }
             }
 
+            if (enabled && hasAudio) {
+                Spacer(Modifier.height(14.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(6.dp))
+                PrayerAlarmScheduler.prayerNames.forEachIndexed { index, prayer ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Azan $prayer")
+                        Switch(
+                            checked = prayerEnabled[prayer] != false,
+                            onCheckedChange = { onPrayerChange(prayer, it) }
+                        )
+                    }
+                    if (index != PrayerAlarmScheduler.prayerNames.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
+            }
+
             if (!hasExactAlarmAccess) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Benarkan alarm tepat untuk memastikan azan boleh bermula pada waktu yang dijadualkan.",
+                    "Azan penuh memerlukan akses alarm tepat supaya Android membenarkan tindakan tepat pada waktunya ketika app di latar belakang.",
                     fontSize = 12.sp
                 )
                 Spacer(Modifier.height(6.dp))
@@ -370,7 +452,10 @@ private fun AzanSettingsCard(
             }
 
             Spacer(Modifier.height(10.dp))
-            Text("Audio berhenti selepas tamat dan mempunyai had keselamatan 10 minit.", fontSize = 12.sp)
+            Text(
+                "Ujian azan bermula serta-merta. Playback sebenar berhenti apabila audio tamat atau selepas had keselamatan 10 minit.",
+                fontSize = 12.sp
+            )
         }
     }
 }

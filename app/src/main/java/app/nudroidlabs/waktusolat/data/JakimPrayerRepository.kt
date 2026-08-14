@@ -2,6 +2,7 @@ package app.nudroidlabs.waktusolat.data
 
 import android.content.Context
 import androidx.core.content.edit
+import app.nudroidlabs.waktusolat.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -24,11 +25,10 @@ class JakimPrayerRepository(private val context: Context) {
         val cacheKey = "week_$zoneCode"
         if (!forceRefresh) {
             prefs.getString(cacheKey, null)?.let { cached ->
-                runCatching { parse(cached) }.getOrNull()?.let { parsed ->
-                    if (isCacheFresh(zoneCode)) {
-                        lastOrigin = PrayerDataOrigin.CACHE_FRESH
-                        return@withContext Result.success(parsed)
-                    }
+                val parsed = parseValidatedCache(cached, zoneCode, cacheKey)
+                if (parsed != null && isCacheFresh(zoneCode)) {
+                    lastOrigin = PrayerDataOrigin.CACHE_FRESH
+                    return@withContext Result.success(parsed)
                 }
             }
         }
@@ -40,7 +40,7 @@ class JakimPrayerRepository(private val context: Context) {
                 connectTimeout = 15_000
                 readTimeout = 15_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "WaktuSolatMalaysia/0.5.0 (NudroidLabs)")
+                setRequestProperty("User-Agent", "WaktuSolatMalaysia/${BuildConfig.VERSION_NAME} (NudroidLabs)")
                 useCaches = false
             }
 
@@ -49,9 +49,7 @@ class JakimPrayerRepository(private val context: Context) {
                 if (code !in 200..299) error("JAKIM HTTP $code")
                 val body = connection.inputStream.bufferedReader().use(BufferedReader::readText)
                 val parsed = parse(body)
-                check(parsed.status == "OK!") { "JAKIM status: ${parsed.status}" }
-                check(parsed.zone.equals(zoneCode, ignoreCase = true)) { "JAKIM zone mismatch" }
-                check(parsed.days.isNotEmpty()) { "JAKIM returned no prayer times" }
+                PrayerDataValidator.validate(parsed, zoneCode)
                 prefs.edit {
                     putString(cacheKey, body)
                     putLong("${cacheKey}_saved", System.currentTimeMillis())
@@ -63,9 +61,30 @@ class JakimPrayerRepository(private val context: Context) {
             }
         }.recoverCatching { networkError ->
             val cached = prefs.getString(cacheKey, null) ?: throw networkError
+            val parsed = parseValidatedCache(cached, zoneCode, cacheKey) ?: throw networkError
+            if (!PrayerDataValidator.isUsableForToday(parsed)) {
+                throw IllegalStateException(
+                    "Data cache sudah tamat tempoh dan tidak lagi meliputi tarikh semasa.",
+                    networkError
+                )
+            }
             lastOrigin = PrayerDataOrigin.CACHE_FALLBACK
-            parse(cached)
+            parsed
         }
+    }
+
+    private fun parseValidatedCache(
+        raw: String,
+        zoneCode: String,
+        cacheKey: String
+    ): PrayerResponse? = runCatching {
+        parse(raw).also { PrayerDataValidator.validate(it, zoneCode) }
+    }.getOrElse {
+        prefs.edit {
+            remove(cacheKey)
+            remove("${cacheKey}_saved")
+        }
+        null
     }
 
     fun savedZone(): String = prefs.getString("selected_zone", "WLY01") ?: "WLY01"

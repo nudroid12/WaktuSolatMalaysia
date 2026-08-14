@@ -70,7 +70,7 @@ fun HomeScreen(
     val now = LocalDateTime.ofInstant(Instant.ofEpochMilli(tick), malaysiaZone)
     val today = data?.days?.firstOrNull {
         PrayerTimeEngine.apiDate(it.dateRaw) == now.toLocalDate()
-    } ?: data?.days?.firstOrNull()
+    }
     val upcoming = data?.let { PrayerTimeEngine.findUpcoming(it.days, now) }
     val zone = JakimZones.byCode(zoneCode)
 

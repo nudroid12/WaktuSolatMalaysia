@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import app.nudroidlabs.waktusolat.audio.AzanPreferences
 import app.nudroidlabs.waktusolat.data.PrayerDay
 import app.nudroidlabs.waktusolat.data.PrayerTimeEngine
 import java.time.LocalDate
@@ -19,14 +20,23 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+enum class PrayerAlertStyle(val label: String) {
+    SOUND("Bunyi"),
+    VIBRATE("Getar"),
+    SILENT("Senyap")
+}
+
 data class NotificationScheduleReport(
     val scheduledCount: Int,
     val exact: Boolean
 )
 
 object PrayerAlarmScheduler {
-    const val CHANNEL_ID = "prayer_times"
-    const val CHANNEL_ID_SILENT = "prayer_times_silent"
+    const val CHANNEL_ID_SOUND = "prayer_times_sound_v1"
+    const val CHANNEL_ID_VIBRATE = "prayer_times_vibrate_v1"
+    const val CHANNEL_ID_SILENT = "prayer_times_silent_v1"
+    const val CHANNEL_ID_AZAN = "prayer_times_azan_v1"
+
     const val EXTRA_PRAYER_NAME = "prayer_name"
     const val EXTRA_PRAYER_TIME = "prayer_time"
     const val EXTRA_ZONE_CODE = "zone_code"
@@ -36,24 +46,46 @@ object PrayerAlarmScheduler {
     const val KIND_EARLY = "early"
 
     val prayerNames: List<String> = listOf("Subuh", "Zohor", "Asar", "Maghrib", "Isyak")
-    val supportedLeadMinutes: List<Int> = listOf(0, 5, 10, 15)
+    val supportedLeadMinutes: List<Int> = listOf(0, 5, 10, 15, 20, 30)
 
     private val malaysiaZone = ZoneId.of("Asia/Kuala_Lumpur")
     private val apiTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
     private val displayTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-    fun createNotificationChannel(context: Context) {
+    fun createNotificationChannels(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Waktu solat",
+
+        val soundChannel = NotificationChannel(
+            CHANNEL_ID_SOUND,
+            "Waktu solat · bunyi",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Peringatan masuk waktu solat dan peringatan awal"
+            description = "Peringatan waktu solat dengan bunyi dan getaran"
             enableVibration(true)
         }
+
+        val vibrateChannel = NotificationChannel(
+            CHANNEL_ID_VIBRATE,
+            "Waktu solat · getar",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Peringatan waktu solat tanpa bunyi, dengan getaran"
+            setSound(null, null)
+            enableVibration(true)
+        }
+
         val silentChannel = NotificationChannel(
             CHANNEL_ID_SILENT,
+            "Waktu solat · senyap",
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "Peringatan waktu solat tanpa bunyi atau getaran"
+            setSound(null, null)
+            enableVibration(false)
+        }
+
+        val azanChannel = NotificationChannel(
+            CHANNEL_ID_AZAN,
             "Waktu solat dengan azan",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
@@ -61,8 +93,10 @@ object PrayerAlarmScheduler {
             setSound(null, null)
             enableVibration(false)
         }
-        manager.createNotificationChannel(channel)
-        manager.createNotificationChannel(silentChannel)
+
+        manager.createNotificationChannels(
+            listOf(soundChannel, vibrateChannel, silentChannel, azanChannel)
+        )
     }
 
     fun notificationsEnabled(context: Context): Boolean =
@@ -70,25 +104,48 @@ object PrayerAlarmScheduler {
 
     fun setNotificationsEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit { putBoolean(KEY_MASTER_ENABLED, enabled) }
-        if (!enabled) cancelAll(context)
     }
 
     fun prayerEnabled(context: Context, prayerName: String): Boolean =
         prefs(context).getBoolean("$KEY_PRAYER_PREFIX$prayerName", true)
 
     fun setPrayerEnabled(context: Context, prayerName: String, enabled: Boolean) {
-        require(prayerName in prayerNames) { "Unknown prayer name: $prayerName" }
+        requirePrayer(prayerName)
         prefs(context).edit { putBoolean("$KEY_PRAYER_PREFIX$prayerName", enabled) }
     }
 
-    fun leadMinutes(context: Context): Int {
-        val stored = prefs(context).getInt(KEY_LEAD_MINUTES, 0)
-        return stored.takeIf { it in supportedLeadMinutes } ?: 0
+    fun leadMinutes(context: Context, prayerName: String): Int {
+        requirePrayer(prayerName)
+        val stored = prefs(context).getInt("$KEY_LEAD_PREFIX$prayerName", -1)
+        if (stored in supportedLeadMinutes) return stored
+
+        val legacy = prefs(context).getInt(KEY_LEGACY_LEAD_MINUTES, 0)
+        return legacy.takeIf { it in supportedLeadMinutes } ?: 0
     }
 
-    fun setLeadMinutes(context: Context, minutes: Int) {
+    fun setLeadMinutes(context: Context, prayerName: String, minutes: Int) {
+        requirePrayer(prayerName)
         require(minutes in supportedLeadMinutes) { "Unsupported lead minutes: $minutes" }
-        prefs(context).edit { putInt(KEY_LEAD_MINUTES, minutes) }
+        prefs(context).edit { putInt("$KEY_LEAD_PREFIX$prayerName", minutes) }
+    }
+
+    fun alertStyle(context: Context): PrayerAlertStyle {
+        val stored = prefs(context).getString(KEY_ALERT_STYLE, null)
+        return PrayerAlertStyle.entries.firstOrNull { it.name == stored }
+            ?: PrayerAlertStyle.SOUND
+    }
+
+    fun setAlertStyle(context: Context, style: PrayerAlertStyle) {
+        prefs(context).edit { putString(KEY_ALERT_STYLE, style.name) }
+    }
+
+    fun channelFor(context: Context, azanPlaying: Boolean): String {
+        if (azanPlaying) return CHANNEL_ID_AZAN
+        return when (alertStyle(context)) {
+            PrayerAlertStyle.SOUND -> CHANNEL_ID_SOUND
+            PrayerAlertStyle.VIBRATE -> CHANNEL_ID_VIBRATE
+            PrayerAlertStyle.SILENT -> CHANNEL_ID_SILENT
+        }
     }
 
     fun hasNotificationPermission(context: Context): Boolean =
@@ -104,39 +161,45 @@ object PrayerAlarmScheduler {
         return alarmManager.canScheduleExactAlarms()
     }
 
+    fun scheduleNeeded(context: Context): Boolean =
+        notificationsEnabled(context) ||
+            (AzanPreferences.enabled(context) && canScheduleExact(context))
+
     fun reschedule(
         context: Context,
         days: List<PrayerDay>,
         zoneCode: String
     ): NotificationScheduleReport {
         cancelAll(context)
-        createNotificationChannel(context)
+        createNotificationChannels(context)
 
-        if (!notificationsEnabled(context)) {
+        if (!scheduleNeeded(context)) {
             return NotificationScheduleReport(0, canScheduleExact(context))
         }
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val exact = canScheduleExact(context)
+        var exactAvailable = canScheduleExact(context)
         val nowMillis = System.currentTimeMillis()
         val scheduledIds = mutableSetOf<String>()
-        val earlyMinutes = leadMinutes(context)
         var count = 0
 
         days.forEach { day ->
             val date = PrayerTimeEngine.apiDate(day.dateRaw) ?: return@forEach
             prayerSpecs(day).forEachIndexed { prayerIndex, (name, rawTime) ->
-                if (!prayerEnabled(context, name)) return@forEachIndexed
+                val notificationEntry = notificationsEnabled(context) && prayerEnabled(context, name)
+                val azanEntry = exactAvailable && AzanPreferences.enabledForPrayer(context, name)
+                if (!notificationEntry && !azanEntry) return@forEachIndexed
 
                 val time = runCatching { LocalTime.parse(rawTime, apiTimeFormatter) }
                     .getOrNull() ?: return@forEachIndexed
                 val prayerTarget = LocalDateTime.of(date, time)
 
                 val entryCode = requestCode(date, prayerIndex, 0)
-                if (scheduleOne(
+                when (
+                    scheduleOne(
                         context = context,
                         alarmManager = alarmManager,
-                        exact = exact,
+                        exactPreferred = exactAvailable,
                         trigger = prayerTarget,
                         nowMillis = nowMillis,
                         requestCode = entryCode,
@@ -147,16 +210,28 @@ object PrayerAlarmScheduler {
                         leadMinutes = 0
                     )
                 ) {
-                    scheduledIds += entryCode.toString()
-                    count++
+                    ScheduleOutcome.EXACT -> {
+                        scheduledIds += entryCode.toString()
+                        count++
+                    }
+
+                    ScheduleOutcome.INEXACT -> {
+                        exactAvailable = false
+                        scheduledIds += entryCode.toString()
+                        count++
+                    }
+
+                    ScheduleOutcome.SKIPPED -> Unit
                 }
 
-                if (earlyMinutes > 0) {
+                val earlyMinutes = leadMinutes(context, name)
+                if (notificationEntry && earlyMinutes > 0) {
                     val earlyCode = requestCode(date, prayerIndex, 1)
-                    if (scheduleOne(
+                    when (
+                        scheduleOne(
                             context = context,
                             alarmManager = alarmManager,
-                            exact = exact,
+                            exactPreferred = exactAvailable,
                             trigger = prayerTarget.minusMinutes(earlyMinutes.toLong()),
                             nowMillis = nowMillis,
                             requestCode = earlyCode,
@@ -167,18 +242,25 @@ object PrayerAlarmScheduler {
                             leadMinutes = earlyMinutes
                         )
                     ) {
-                        scheduledIds += earlyCode.toString()
-                        count++
+                        ScheduleOutcome.EXACT -> {
+                            scheduledIds += earlyCode.toString()
+                            count++
+                        }
+
+                        ScheduleOutcome.INEXACT -> {
+                            exactAvailable = false
+                            scheduledIds += earlyCode.toString()
+                            count++
+                        }
+
+                        ScheduleOutcome.SKIPPED -> Unit
                     }
                 }
             }
         }
 
-        prefs(context).edit {
-            putStringSet(KEY_SCHEDULED_IDS, scheduledIds)
-        }
-
-        return NotificationScheduleReport(count, exact)
+        prefs(context).edit { putStringSet(KEY_SCHEDULED_IDS, scheduledIds) }
+        return NotificationScheduleReport(count, exactAvailable)
     }
 
     fun cancelAll(context: Context) {
@@ -209,7 +291,7 @@ object PrayerAlarmScheduler {
     private fun scheduleOne(
         context: Context,
         alarmManager: AlarmManager,
-        exact: Boolean,
+        exactPreferred: Boolean,
         trigger: LocalDateTime,
         nowMillis: Long,
         requestCode: Int,
@@ -218,12 +300,12 @@ object PrayerAlarmScheduler {
         zoneCode: String,
         kind: String,
         leadMinutes: Int
-    ): Boolean {
+    ): ScheduleOutcome {
         val triggerAtMillis = trigger
             .atZone(malaysiaZone)
             .toInstant()
             .toEpochMilli()
-        if (triggerAtMillis <= nowMillis + 30_000L) return false
+        if (triggerAtMillis <= nowMillis + 30_000L) return ScheduleOutcome.SKIPPED
 
         val pendingIntent = alarmPendingIntent(
             context = context,
@@ -235,20 +317,25 @@ object PrayerAlarmScheduler {
             leadMinutes = leadMinutes
         )
 
-        if (exact) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent
-            )
-        } else {
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent
-            )
+        if (exactPreferred) {
+            try {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+                return ScheduleOutcome.EXACT
+            } catch (_: SecurityException) {
+                // Permission can change between the capability check and scheduling.
+            }
         }
-        return true
+
+        alarmManager.setAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            triggerAtMillis,
+            pendingIntent
+        )
+        return ScheduleOutcome.INEXACT
     }
 
     private fun prayerSpecs(day: PrayerDay): List<Pair<String, String>> = listOf(
@@ -289,13 +376,25 @@ object PrayerAlarmScheduler {
         return dayPart * 100 + prayerIndex * 2 + kindIndex
     }
 
+    private fun requirePrayer(prayerName: String) {
+        require(prayerName in prayerNames) { "Unknown prayer name: $prayerName" }
+    }
+
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private enum class ScheduleOutcome {
+        EXACT,
+        INEXACT,
+        SKIPPED
+    }
 
     private const val PREFS_NAME = "prayer_notification_settings"
     private const val KEY_MASTER_ENABLED = "master_enabled"
     private const val KEY_PRAYER_PREFIX = "prayer_"
-    private const val KEY_LEAD_MINUTES = "lead_minutes"
+    private const val KEY_LEAD_PREFIX = "lead_minutes_"
+    private const val KEY_LEGACY_LEAD_MINUTES = "lead_minutes"
+    private const val KEY_ALERT_STYLE = "alert_style"
     private const val KEY_SCHEDULED_IDS = "scheduled_alarm_ids"
     private const val ACTION_ALARM = "app.nudroidlabs.waktusolat.PRAYER_ALARM"
 }
