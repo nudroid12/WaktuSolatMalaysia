@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "app.nudroidlabs.waktusolat"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.nudroidlabs.waktusolat"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        targetSdk = 37
+        versionCode = 4
+        versionName = "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -29,6 +29,11 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+
+    lint {
+        abortOnError = true
+        warningsAsErrors = true
+    }
 }
 
 dependencies {
@@ -37,8 +42,8 @@ dependencies {
     androidTestImplementation(composeBom)
 
     implementation("androidx.activity:activity-compose:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     implementation("androidx.compose.material3:material3")

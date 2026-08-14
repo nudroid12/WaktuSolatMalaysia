@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.Looper
+import androidx.core.content.edit
 import app.nudroidlabs.waktusolat.data.PrayerZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -23,7 +24,20 @@ import kotlin.coroutines.resumeWithException
 data class ZoneSuggestion(
     val zone: PrayerZone,
     val addressText: String,
-    val accuracyMetres: Float
+    val accuracyMetres: Float,
+    val latitude: Double,
+    val longitude: Double,
+    val altitudeMetres: Double,
+    val locationTimeMillis: Long
+)
+
+data class SavedLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val altitudeMetres: Double,
+    val accuracyMetres: Float,
+    val capturedAtMillis: Long,
+    val addressText: String?
 )
 
 class LocationZoneDetector(private val context: Context) {
@@ -33,8 +47,13 @@ class LocationZoneDetector(private val context: Context) {
     @SuppressLint("MissingPermission")
     suspend fun detect(): Result<ZoneSuggestion> = runCatching {
         val location = withTimeout(20_000L) { obtainLocation() }
+        saveLocation(location, null)
+
         val address = reverseGeocode(location)
-            ?: error("Alamat pentadbiran tidak dapat dikenal pasti daripada lokasi ini.")
+            ?: error(
+                "Koordinat lokasi berjaya dikesan, tetapi alamat pentadbiran tidak dapat " +
+                    "dikenal pasti. Kiblat masih boleh menggunakan lokasi ini."
+            )
 
         if (!address.countryCode.isNullOrBlank() &&
             !address.countryCode.equals("MY", ignoreCase = true)
@@ -51,14 +70,21 @@ class LocationZoneDetector(private val context: Context) {
 
         val zone = JakimZoneResolver.resolve(address.adminArea, parts)
             ?: error(
-                "Zon JAKIM tidak dapat dipastikan dengan yakin daripada alamat ini. " +
+                "Lokasi berjaya dikesan, tetapi zon JAKIM tidak dapat dipastikan dengan yakin. " +
                     "Sila pilih zon secara manual."
             )
 
+        val label = addressLabel(address)
+        saveLocation(location, label)
+
         ZoneSuggestion(
             zone = zone,
-            addressText = addressLabel(address),
-            accuracyMetres = location.accuracy
+            addressText = label,
+            accuracyMetres = location.accuracy,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            altitudeMetres = location.altitude,
+            locationTimeMillis = location.time
         )
     }
 
@@ -76,7 +102,9 @@ class LocationZoneDetector(private val context: Context) {
         }
 
         val recent = enabledProviders
-            .mapNotNull { provider -> runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull() }
+            .mapNotNull { provider ->
+                runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+            }
             .filter { location ->
                 val ageMs = System.currentTimeMillis() - location.time
                 ageMs in 0..RECENT_LOCATION_MAX_AGE_MS
@@ -121,7 +149,11 @@ class LocationZoneDetector(private val context: Context) {
                     }
 
                     @Deprecated("Deprecated in Android")
-                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+                    override fun onStatusChanged(
+                        provider: String?,
+                        status: Int,
+                        extras: Bundle?
+                    ) = Unit
 
                     override fun onProviderEnabled(provider: String) = Unit
 
@@ -146,7 +178,6 @@ class LocationZoneDetector(private val context: Context) {
     @Suppress("DEPRECATION")
     private suspend fun reverseGeocode(location: Location): Address? = withContext(Dispatchers.IO) {
         if (!Geocoder.isPresent()) return@withContext null
-
         val geocoder = Geocoder(context, Locale("ms", "MY"))
         geocoder.getFromLocation(location.latitude, location.longitude, 1)
             ?.firstOrNull()
@@ -164,7 +195,49 @@ class LocationZoneDetector(private val context: Context) {
         return parts.joinToString(", ").ifBlank { "Lokasi semasa" }
     }
 
+    private fun saveLocation(location: Location, addressText: String?) {
+        prefs(context).edit {
+            putString(KEY_LATITUDE, location.latitude.toString())
+            putString(KEY_LONGITUDE, location.longitude.toString())
+            putString(KEY_ALTITUDE, location.altitude.toString())
+            putFloat(KEY_ACCURACY, location.accuracy)
+            putLong(
+                KEY_CAPTURED_AT,
+                location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
+            )
+            if (addressText != null) putString(KEY_ADDRESS, addressText)
+        }
+    }
+
     companion object {
         private const val RECENT_LOCATION_MAX_AGE_MS = 15 * 60 * 1000L
+        private const val PREFS_NAME = "saved_location"
+        private const val KEY_LATITUDE = "latitude"
+        private const val KEY_LONGITUDE = "longitude"
+        private const val KEY_ALTITUDE = "altitude"
+        private const val KEY_ACCURACY = "accuracy"
+        private const val KEY_CAPTURED_AT = "captured_at"
+        private const val KEY_ADDRESS = "address"
+
+        fun savedLocation(context: Context): SavedLocation? {
+            val prefs = prefs(context)
+            val latitude = prefs.getString(KEY_LATITUDE, null)?.toDoubleOrNull() ?: return null
+            val longitude = prefs.getString(KEY_LONGITUDE, null)?.toDoubleOrNull() ?: return null
+            val altitude = prefs.getString(KEY_ALTITUDE, null)?.toDoubleOrNull() ?: 0.0
+
+            if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+
+            return SavedLocation(
+                latitude = latitude,
+                longitude = longitude,
+                altitudeMetres = altitude,
+                accuracyMetres = prefs.getFloat(KEY_ACCURACY, 0f),
+                capturedAtMillis = prefs.getLong(KEY_CAPTURED_AT, 0L),
+                addressText = prefs.getString(KEY_ADDRESS, null)
+            )
+        }
+
+        private fun prefs(context: Context) =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 }

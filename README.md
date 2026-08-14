@@ -1,45 +1,47 @@
 # Waktu Solat Malaysia
 
 Developer: NudroidLabs
+
 Application ID: `app.nudroidlabs.waktusolat`
-Current milestone: M2
-Version: `0.2.0`
 
-## Data source
+Current version: `0.4.0`
 
-Prayer schedules are read from the official JAKIM e-Solat domain:
+## Fungsi utama
+
+* Jadual waktu solat terus daripada domain rasmi e-Solat JAKIM.
+* Imsak, Subuh, Syuruk, Duha, Zohor, Asar, Maghrib dan Isyak.
+* Solat seterusnya dengan countdown yang hanya berjalan ketika halaman Utama aktif.
+* Senarai 60 zon JAKIM dan pilihan zon manual.
+* Pengesanan lokasi sekali sahaja apabila pengguna meminta, tanpa GPS latar belakang.
+* Jadual 7 hari.
+* Notifikasi masuk waktu untuk Subuh, Zohor, Asar, Maghrib dan Isyak.
+* Pilihan peringatan awal 5, 10 atau 15 minit.
+* Sokongan alarm tepat apabila pengguna memberikan akses Android.
+* Kompas kiblat berdasarkan koordinat terakhir, sensor rotation vector dan pembetulan deklinasi magnet.
+* Audio azan penuh menggunakan fail audio yang dipilih sendiri oleh pengguna.
+* Audio azan dimainkan melalui foreground media playback hanya ketika masuk waktu dan berhenti apabila audio tamat, dengan had keselamatan 10 minit.
+* Cache jadual JAKIM untuk mengurangkan penggunaan rangkaian.
+* WorkManager hanya menyemak jadual sekali sehari apabila notifikasi dihidupkan.
+* Tiada analytics, iklan atau tracker.
+
+## Sumber data
+
+Aplikasi menggunakan endpoint pada domain rasmi e-Solat JAKIM:
 
 `https://www.e-solat.gov.my/index.php?r=esolatApi/TakwimSolat&period=week&zone=WLY01`
 
-The zone code is replaced with the user's selected JAKIM zone.
+Kod zon diganti mengikut zon pilihan pengguna. Endpoint ini boleh dicapai pada domain rasmi JAKIM, tetapi aplikasi tidak menganggapnya sebagai API pembangun yang dijamin stabil. Respons diperiksa sebelum digunakan dan respons terakhir yang sah dicache.
 
-The endpoint is publicly reachable on JAKIM's official domain, but it is not presented on the e-Solat site as a formally documented public developer API. The app validates the returned status, zone and time fields, then caches the last valid response.
+## Privasi lokasi
 
-## M2 scope
+Aplikasi tidak meminta `ACCESS_BACKGROUND_LOCATION`. Lokasi hanya diambil selepas pengguna menekan butang kesan lokasi. Koordinat terakhir disimpan pada peranti untuk fungsi kiblat. Sensor kompas hanya didaftarkan ketika halaman Kiblat sedang dipaparkan dan dinyahdaftar apabila pengguna meninggalkan halaman tersebut.
 
-- Imsak, Subuh, Syuruk, Duha, Zohor, Asar, Maghrib and Isyak from e-Solat JAKIM.
-- Live next-prayer countdown.
-- 60 JAKIM zone codes.
-- Manual zone selection remains available at all times.
-- User-triggered location detection using Android location and reverse geocoding.
-- Location detection produces a zone suggestion only when the administrative address maps uniquely to the official JAKIM zone names.
-- Ambiguous results are not guessed and do not silently change the selected zone.
-- Optional prayer notifications for Subuh, Zohor, Asar, Maghrib and Isyak.
-- Per-prayer notification switches.
-- Android 13+ notification runtime permission handling.
-- Android 12+ exact-alarm access handling, with inexact fallback if exact access is unavailable.
-- Future prayer alarms are rebuilt after time changes, timezone changes, reboot, or exact-alarm permission changes.
-- WorkManager refreshes the JAKIM schedule periodically so future alarms remain populated.
-- Weekly response cache remains available if the network is temporarily unavailable.
+## Audio azan
 
-## Location accuracy note
-
-JAKIM prayer schedules use administrative prayer zones, including several special or split zones. This project does not use a nearest-coordinate approximation. Android reverse geocoding is used to obtain administrative place names, then those names are matched against the official JAKIM zone list. If a unique match cannot be established, the user must select the zone manually.
-
-## Notification accuracy note
-
-Exact alarms require special access on recent Android versions. If the user has not granted exact-alarm access, Android may deliver reminders later than the precise prayer-time minute. The app exposes this state and provides a shortcut to the system setting.
+Tiada rakaman azan dibundel dalam APK. Pengguna memilih fail audio sendiri melalui Android document picker. Ini mengelakkan APK menjadi besar dan tidak memerlukan permission storan umum. Main balik penuh hanya dicuba apabila alarm tepat tersedia. Jika tidak, notifikasi waktu solat masih berfungsi mengikut keupayaan Android.
 
 ## Build
 
-The project targets Android API 36 with JDK 17 and Gradle 9.4.1. GitHub Actions runs unit tests before assembling the debug APK.
+Konfigurasi semasa menggunakan Android API 37, JDK 17 dan Gradle 9.4.1 melalui GitHub Actions. Workflow M4 hanya commit kod `0.4.0` selepas unit test, APK debug dan Android Lint semuanya lulus tanpa error atau warning.
+
+M4 memfokuskan kestabilan, pembersihan lint dan penggunaan bateri yang minimum.

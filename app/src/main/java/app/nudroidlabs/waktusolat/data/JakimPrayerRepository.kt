@@ -1,6 +1,7 @@
 package app.nudroidlabs.waktusolat.data
 
 import android.content.Context
+import androidx.core.content.edit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -28,7 +29,7 @@ class JakimPrayerRepository(private val context: Context) {
                 connectTimeout = 15_000
                 readTimeout = 15_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "WaktuSolatMalaysia/0.2.0 (NudroidLabs)")
+                setRequestProperty("User-Agent", "WaktuSolatMalaysia/0.4.0 (NudroidLabs)")
                 useCaches = false
             }
 
@@ -40,10 +41,10 @@ class JakimPrayerRepository(private val context: Context) {
                 check(parsed.status == "OK!") { "JAKIM status: ${parsed.status}" }
                 check(parsed.zone.equals(zoneCode, ignoreCase = true)) { "JAKIM zone mismatch" }
                 check(parsed.days.isNotEmpty()) { "JAKIM returned no prayer times" }
-                prefs.edit()
-                    .putString(cacheKey, body)
-                    .putLong("${cacheKey}_saved", System.currentTimeMillis())
-                    .apply()
+                prefs.edit {
+                    putString(cacheKey, body)
+                    putLong("${cacheKey}_saved", System.currentTimeMillis())
+                }
                 parsed
             } finally {
                 connection.disconnect()
@@ -57,7 +58,7 @@ class JakimPrayerRepository(private val context: Context) {
     fun savedZone(): String = prefs.getString("selected_zone", "WLY01") ?: "WLY01"
 
     fun saveZone(zoneCode: String) {
-        prefs.edit().putString("selected_zone", zoneCode).apply()
+        prefs.edit { putString("selected_zone", zoneCode) }
     }
 
     private fun isCacheFresh(zoneCode: String): Boolean {
@@ -114,7 +115,7 @@ class JakimPrayerRepository(private val context: Context) {
         .replace("&deg;", "°")
 
     companion object {
-        private const val CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000L
+        private const val CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000L
         private val TIME_REGEX = Regex("^(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$")
     }
 }

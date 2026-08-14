@@ -49,7 +49,7 @@ class PrayerRefreshWorker(
 
             val request = PeriodicWorkRequest.Builder(
                 PrayerRefreshWorker::class.java,
-                12,
+                24,
                 TimeUnit.HOURS
             )
                 .setConstraints(constraints)
