@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "app.nudroidlabs.waktusolat"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.nudroidlabs.waktusolat"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
 
@@ -34,7 +34,7 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
