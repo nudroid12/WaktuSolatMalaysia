@@ -1,4 +1,4 @@
-name: M4 Clean Stable Build
+name: M4 Clean Stable Build v2
 
 on:
   workflow_dispatch:
@@ -566,21 +566,35 @@ jobs:
       - name: Set up current Android SDK tools
         uses: android-actions/setup-android@v4
 
-      - name: Install Android 17 SDK
+      - name: Prepare Android 17 SDK
         shell: bash
         run: |
           set -euo pipefail
           echo "ANDROID_SDK_INSTALL" > .m4-stage
 
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;36.0.0"
+          sdkmanager "platform-tools" "build-tools;36.0.0"
 
-          test -d "$ANDROID_HOME/platforms/android-37"
+          PLATFORM_DIR=""
+
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ]; then
+            PLATFORM_DIR="$ANDROID_HOME/platforms/android-37.0"
+          elif [ -d "$ANDROID_HOME/platforms/android-37" ]; then
+            PLATFORM_DIR="$ANDROID_HOME/platforms/android-37"
+          else
+            echo "Android API 37.0 platform is not present."
+            echo "Available platforms:"
+            ls -1 "$ANDROID_HOME/platforms" || true
+            exit 1
+          fi
+
+          test -f "$PLATFORM_DIR/android.jar"
           test -d "$ANDROID_HOME/build-tools/36.0.0"
 
+          echo "Using Android platform: $PLATFORM_DIR"
           echo "sdkmanager: $(command -v sdkmanager)"
           sdkmanager --version
-          echo "Installed platform:"
+          echo "Installed platforms:"
           ls -1 "$ANDROID_HOME/platforms" | tail -n 20
 
       - name: Set up Gradle 9.4.1
