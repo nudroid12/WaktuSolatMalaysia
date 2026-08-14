@@ -2,6 +2,7 @@ package app.nudroidlabs.waktusolat.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,31 +21,42 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nudroidlabs.waktusolat.data.JakimZones
 import app.nudroidlabs.waktusolat.data.PrayerResponse
+import app.nudroidlabs.waktusolat.data.PrayerTimeEngine
+import java.time.LocalDate
+import java.time.ZoneId
 
 @Composable
 fun WeekScreen(
     modifier: Modifier,
+    zoneCode: String,
     data: PrayerResponse?,
     loading: Boolean,
     error: String?,
     onRefresh: () -> Unit
 ) {
+    val zone = JakimZones.byCode(zoneCode)
+    val today = LocalDate.now(ZoneId.of("Asia/Kuala_Lumpur"))
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(18.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Jadual 7 Hari", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "Jadual semasa daripada e-Solat JAKIM",
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column {
+                Text("Jadual 7 Hari", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "$zoneCode · ${zone.area}",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp
+                )
+            }
         }
 
-        when {
-            loading -> item {
+        if (loading && data == null) {
+            item {
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -54,28 +66,54 @@ fun WeekScreen(
                     CircularProgressIndicator()
                 }
             }
+        }
 
-            error != null -> item {
+        if (error != null && data == null) {
+            item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    androidx.compose.foundation.layout.Column(Modifier.padding(18.dp)) {
+                    Column(Modifier.padding(18.dp)) {
                         Text("Data tidak dapat dimuatkan", fontWeight = FontWeight.Bold)
-                        Text(error)
+                        Text(error, fontSize = 13.sp)
                         Button(onClick = onRefresh) { Text("Cuba lagi") }
                     }
                 }
             }
+        }
 
-            data != null -> {
-                items(data.days, key = { it.dateRaw }) { day ->
-                    PrayerTimesCard(
-                        day = day,
-                        title = day.dayRaw.ifBlank { "Jadual" },
-                        compact = true
+        data?.let { response ->
+            items(response.days, key = { it.dateRaw }) { day ->
+                val isToday = PrayerTimeEngine.apiDate(day.dateRaw) == today
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isToday) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        }
                     )
+                ) {
+                    Column(Modifier.padding(4.dp)) {
+                        PrayerTimesCard(
+                            day = day,
+                            title = if (isToday) "Hari ini · ${day.dayRaw}" else day.dayRaw.ifBlank { "Jadual" },
+                            compact = true
+                        )
+                    }
                 }
+            }
+        }
+
+        if (data != null && error != null) {
+            item {
+                Text(
+                    "Data sedia ada masih dipaparkan. Kemas kini terbaru gagal: $error",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f)
+                )
             }
         }
     }

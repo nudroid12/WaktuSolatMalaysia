@@ -9,15 +9,26 @@ import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
 
+enum class PrayerDataOrigin {
+    NETWORK,
+    CACHE_FRESH,
+    CACHE_FALLBACK
+}
+
 class JakimPrayerRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("waktu_solat_cache", Context.MODE_PRIVATE)
+    @Volatile private var lastOrigin: PrayerDataOrigin? = null
+
 
     suspend fun loadWeek(zoneCode: String, forceRefresh: Boolean = false): Result<PrayerResponse> = withContext(Dispatchers.IO) {
         val cacheKey = "week_$zoneCode"
         if (!forceRefresh) {
             prefs.getString(cacheKey, null)?.let { cached ->
                 runCatching { parse(cached) }.getOrNull()?.let { parsed ->
-                    if (isCacheFresh(zoneCode)) return@withContext Result.success(parsed)
+                    if (isCacheFresh(zoneCode)) {
+                        lastOrigin = PrayerDataOrigin.CACHE_FRESH
+                        return@withContext Result.success(parsed)
+                    }
                 }
             }
         }
@@ -29,7 +40,7 @@ class JakimPrayerRepository(private val context: Context) {
                 connectTimeout = 15_000
                 readTimeout = 15_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "WaktuSolatMalaysia/0.4.0 (NudroidLabs)")
+                setRequestProperty("User-Agent", "WaktuSolatMalaysia/0.5.0 (NudroidLabs)")
                 useCaches = false
             }
 
@@ -45,12 +56,14 @@ class JakimPrayerRepository(private val context: Context) {
                     putString(cacheKey, body)
                     putLong("${cacheKey}_saved", System.currentTimeMillis())
                 }
+                lastOrigin = PrayerDataOrigin.NETWORK
                 parsed
             } finally {
                 connection.disconnect()
             }
         }.recoverCatching { networkError ->
             val cached = prefs.getString(cacheKey, null) ?: throw networkError
+            lastOrigin = PrayerDataOrigin.CACHE_FALLBACK
             parse(cached)
         }
     }
@@ -60,6 +73,10 @@ class JakimPrayerRepository(private val context: Context) {
     fun saveZone(zoneCode: String) {
         prefs.edit { putString("selected_zone", zoneCode) }
     }
+
+    fun lastDataOrigin(): PrayerDataOrigin? = lastOrigin
+
+    fun cacheSavedAt(zoneCode: String): Long = prefs.getLong("week_${zoneCode}_saved", 0L)
 
     private fun isCacheFresh(zoneCode: String): Boolean {
         val savedAt = prefs.getLong("week_${zoneCode}_saved", 0L)

@@ -9,6 +9,7 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +35,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import app.nudroidlabs.waktusolat.audio.AzanPreferences
 import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
+import app.nudroidlabs.waktusolat.data.PrayerDataOrigin
 import app.nudroidlabs.waktusolat.data.PrayerResponse
 import app.nudroidlabs.waktusolat.location.LocationZoneDetector
 import app.nudroidlabs.waktusolat.location.SavedLocation
@@ -40,7 +43,7 @@ import app.nudroidlabs.waktusolat.location.ZoneSuggestion
 import app.nudroidlabs.waktusolat.notification.PrayerAlarmScheduler
 import app.nudroidlabs.waktusolat.notification.PrayerRefreshWorker
 
-private val AppColours = darkColorScheme(
+private val DarkColours = darkColorScheme(
     primary = Color(0xFFF4D58D),
     onPrimary = Color(0xFF2A2105),
     background = Color(0xFF071A14),
@@ -48,6 +51,16 @@ private val AppColours = darkColorScheme(
     surfaceVariant = Color(0xFF173C2F),
     onBackground = Color(0xFFF2F7F4),
     onSurface = Color(0xFFF2F7F4)
+)
+
+private val LightColours = lightColorScheme(
+    primary = Color(0xFF2E6D57),
+    onPrimary = Color.White,
+    background = Color(0xFFF7FAF8),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFE5F0EA),
+    onBackground = Color(0xFF14201B),
+    onSurface = Color(0xFF14201B)
 )
 
 enum class AppTab(val label: String, val shortLabel: String) {
@@ -59,15 +72,33 @@ enum class AppTab(val label: String, val shortLabel: String) {
 
 @Composable
 fun WaktuSolatApp() {
-    MaterialTheme(colorScheme = AppColours) {
+    val context = LocalContext.current.applicationContext
+    var appearanceMode by remember { mutableStateOf(AppearancePreferences.mode(context)) }
+    val systemDark = isSystemInDarkTheme()
+    val useDark = when (appearanceMode) {
+        AppearanceMode.SYSTEM -> systemDark
+        AppearanceMode.LIGHT -> false
+        AppearanceMode.DARK -> true
+    }
+
+    MaterialTheme(colorScheme = if (useDark) DarkColours else LightColours) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            PrayerAppShell()
+            PrayerAppShell(
+                appearanceMode = appearanceMode,
+                onAppearanceModeChange = { mode ->
+                    AppearancePreferences.setMode(context, mode)
+                    appearanceMode = mode
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun PrayerAppShell() {
+private fun PrayerAppShell(
+    appearanceMode: AppearanceMode,
+    onAppearanceModeChange: (AppearanceMode) -> Unit
+) {
     val context = LocalContext.current
     val appContext = context.applicationContext
     val repository = remember { JakimPrayerRepository(appContext) }
@@ -76,6 +107,8 @@ private fun PrayerAppShell() {
     var tab by remember { mutableStateOf(AppTab.HOME) }
     var zoneCode by remember { mutableStateOf(repository.savedZone()) }
     var data by remember { mutableStateOf<PrayerResponse?>(null) }
+    var dataOrigin by remember { mutableStateOf<PrayerDataOrigin?>(null) }
+    var cacheSavedAt by remember { mutableLongStateOf(repository.cacheSavedAt(zoneCode)) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var showZones by remember { mutableStateOf(false) }
@@ -111,6 +144,8 @@ private fun PrayerAppShell() {
         zoneCode = code
         repository.saveZone(code)
         data = null
+        dataOrigin = null
+        cacheSavedAt = repository.cacheSavedAt(code)
         error = null
         loading = true
         zoneSuggestion = null
@@ -218,8 +253,14 @@ private fun PrayerAppShell() {
         error = null
         val forceRefresh = reloadNonce > lastHandledRefreshNonce
         repository.loadWeek(zoneCode, forceRefresh = forceRefresh).fold(
-            onSuccess = { data = it },
-            onFailure = { error = it.message ?: "Tidak dapat memuatkan data JAKIM." }
+            onSuccess = {
+                data = it
+                dataOrigin = repository.lastDataOrigin()
+                cacheSavedAt = repository.cacheSavedAt(zoneCode)
+            },
+            onFailure = {
+                error = it.message ?: "Tidak dapat memuatkan data JAKIM."
+            }
         )
         if (forceRefresh) lastHandledRefreshNonce = reloadNonce
         loading = false
@@ -290,7 +331,7 @@ private fun PrayerAppShell() {
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { tab = item },
-                        icon = { Text(item.shortLabel) },
+                        icon = { Text(item.shortLabel, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
                         label = { Text(item.label) }
                     )
                 }
@@ -302,19 +343,17 @@ private fun PrayerAppShell() {
                 modifier = Modifier.padding(inner),
                 zoneCode = zoneCode,
                 data = data,
+                dataOrigin = dataOrigin,
+                cacheSavedAt = cacheSavedAt,
                 loading = loading,
                 error = error,
-                detectingLocation = detectingLocation,
-                locationMessage = locationMessage,
-                zoneSuggestion = zoneSuggestion,
                 onChooseZone = { showZones = true },
-                onDetectLocation = ::requestLocationDetection,
-                onUseSuggestion = { setZone(it.zone.code) },
                 onRefresh = { reloadNonce++ }
             )
 
             AppTab.WEEK -> WeekScreen(
                 modifier = Modifier.padding(inner),
+                zoneCode = zoneCode,
                 data = data,
                 loading = loading,
                 error = error,
@@ -333,6 +372,10 @@ private fun PrayerAppShell() {
             AppTab.SETTINGS -> SettingsScreen(
                 modifier = Modifier.padding(inner),
                 zoneCode = zoneCode,
+                themeMode = appearanceMode,
+                detectingLocation = detectingLocation,
+                locationMessage = locationMessage,
+                zoneSuggestion = zoneSuggestion,
                 notificationsEnabled = notificationsEnabled,
                 enabledPrayers = enabledPrayers,
                 leadMinutes = leadMinutes,
@@ -342,6 +385,9 @@ private fun PrayerAppShell() {
                 azanEnabled = azanEnabled,
                 azanAudioName = audioName,
                 onChooseZone = { showZones = true },
+                onThemeModeChange = onAppearanceModeChange,
+                onDetectLocation = ::requestLocationDetection,
+                onUseSuggestion = { setZone(it.zone.code) },
                 onMasterNotificationChange = ::setNotifications,
                 onPrayerChange = { prayer, enabled ->
                     PrayerAlarmScheduler.setPrayerEnabled(appContext, prayer, enabled)

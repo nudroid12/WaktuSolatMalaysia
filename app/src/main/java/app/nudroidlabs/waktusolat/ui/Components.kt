@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -20,6 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,7 +40,8 @@ import app.nudroidlabs.waktusolat.location.ZoneSuggestion
 fun PrayerTimesCard(
     day: PrayerDay,
     title: String = "Hari ini",
-    compact: Boolean = false
+    compact: Boolean = false,
+    highlightedPrayer: String? = null
 ) {
     val rows = if (compact) {
         listOf(
@@ -74,23 +77,57 @@ fun PrayerTimesCard(
             )
             Text(day.dateRaw, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text("Hijrah ${day.hijri}", fontSize = 13.sp)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
-            rows.forEachIndexed { index, (name, raw) ->
+            rows.chunked(2).forEachIndexed { pairIndex, pair ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = if (compact) 6.dp else 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(name)
-                    Text(
-                        PrayerTimeEngine.displayTime(raw),
-                        fontWeight = FontWeight.Bold
-                    )
+                    pair.forEach { (name, raw) ->
+                        PrayerTimeCell(
+                            modifier = Modifier.weight(1f),
+                            name = name,
+                            time = PrayerTimeEngine.displayTime(raw),
+                            highlighted = name == highlightedPrayer
+                        )
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
-                if (index != rows.lastIndex) HorizontalDivider()
+                if (pairIndex != rows.chunked(2).lastIndex) Spacer(Modifier.height(10.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun PrayerTimeCell(
+    modifier: Modifier,
+    name: String,
+    time: String,
+    highlighted: Boolean
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = if (highlighted) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        }
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Text(
+                name,
+                fontSize = 12.sp,
+                color = if (highlighted) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                }
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(time, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -110,19 +147,19 @@ fun LocationCard(
     ) {
         Column(Modifier.padding(18.dp)) {
             Text(
-                "Lokasi dan zon",
+                "Lokasi",
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(5.dp))
             Text(
-                "Lokasi diambil sekali sahaja apabila diminta. Tiada GPS berjalan di latar belakang.",
+                "Lokasi digunakan sekali apabila diminta. GPS tidak berjalan di latar belakang.",
                 fontSize = 13.sp
             )
             Spacer(Modifier.height(10.dp))
 
             Button(onClick = onDetect, enabled = !detecting) {
-                Text(if (detecting) "Mengesan lokasi..." else "Kesan zon melalui lokasi")
+                Text(if (detecting) "Mengesan lokasi..." else "Kesan lokasi dan zon")
             }
 
             message?.let {
@@ -131,15 +168,16 @@ fun LocationCard(
             }
 
             suggestion?.let {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(10.dp))
-                Text("Alamat: ${it.addressText}", fontSize = 13.sp)
+                Text("Alamat", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                Text(it.addressText, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Ketepatan lokasi: ±${it.accuracyMetres.toInt().coerceAtLeast(1)} m",
+                    "Ketepatan ±${it.accuracyMetres.toInt().coerceAtLeast(1)} m",
                     fontSize = 12.sp
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     "Cadangan ${it.zone.code}: ${it.zone.area}",
                     fontWeight = FontWeight.Bold
@@ -171,7 +209,10 @@ fun ZoneSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Pilih zon JAKIM", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Column {
+                    Text("Pilih zon JAKIM", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("60 zon rasmi Malaysia", fontSize = 12.sp)
+                }
                 TextButton(onClick = onDismiss) { Text("Tutup") }
             }
 
@@ -183,14 +224,22 @@ fun ZoneSheet(
                             .clickable { onSelect(zone.code) }
                             .background(
                                 if (zone.code == current) {
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                 } else {
                                     Color.Transparent
                                 }
                             )
                             .padding(horizontal = 18.dp, vertical = 12.dp)
                     ) {
-                        Text("${zone.code} · ${zone.state}", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${zone.code} · ${zone.state}",
+                            color = if (zone.code == current) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Text(zone.area, fontSize = 13.sp)
                     }
                 }
