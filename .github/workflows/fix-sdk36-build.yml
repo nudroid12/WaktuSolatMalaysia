@@ -1,0 +1,211 @@
+name: Fix SDK 36 and Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify project exists
+        shell: bash
+        run: |
+          set -e
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+
+      - name: Patch project to stable Android 16 SDK
+        shell: bash
+        run: |
+          set -e
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          app = Path("app/build.gradle.kts")
+          text = app.read_text(encoding="utf-8")
+
+          text, n1 = re.subn(r'compileSdk\s*=\s*\d+', 'compileSdk = 36', text, count=1)
+          text, n2 = re.subn(r'targetSdk\s*=\s*\d+', 'targetSdk = 36', text, count=1)
+          text, n3 = re.subn(
+              r'androidx\.compose:compose-bom:[0-9.]+',
+              'androidx.compose:compose-bom:2026.06.00',
+              text,
+              count=1
+          )
+
+          if n1 != 1:
+              raise SystemExit("Could not patch compileSdk")
+          if n2 != 1:
+              raise SystemExit("Could not patch targetSdk")
+          if n3 != 1:
+              raise SystemExit("Could not patch Compose BOM")
+
+          app.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify patched configuration
+        shell: bash
+        run: |
+          set -e
+
+          echo "----- app/build.gradle.kts -----"
+          cat app/build.gradle.kts
+          echo "--------------------------------"
+
+          grep -q 'compileSdk = 36' app/build.gradle.kts
+          grep -q 'targetSdk = 36' app/build.gradle.kts
+          grep -q 'compose-bom:2026.06.00' app/build.gradle.kts
+          grep -q 'app.nudroidlabs.waktusolat' app/build.gradle.kts
+
+          if grep -RniE 'app\.kcs|com\.kcs|package[[:space:]]+.*kcs' app; then
+            echo "ERROR: KCS identifier found."
+            exit 1
+          fi
+
+      - name: Commit stable build configuration
+        shell: bash
+        run: |
+          set -e
+          git config user.name "NudroidLabs Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+
+          git add app/build.gradle.kts
+
+          if git diff --cached --quiet; then
+            echo "Stable SDK patch is already applied."
+          else
+            git commit -m "Fix Android build on stable SDK 36"
+            git push origin HEAD:main
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licences
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
+      - name: Install Android 16 SDK packages
+        shell: bash
+        run: |
+          set -e
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
+
+          echo "Installed Android platforms:"
+          ls -1 "$ANDROID_HOME/platforms"
+
+          echo "Installed Build Tools:"
+          ls -1 "$ANDROID_HOME/build-tools"
+
+      - name: Set up Gradle 9.4.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+
+      - name: Tool versions
+        shell: bash
+        run: |
+          java -version
+          gradle --version
+          sdkmanager --version
+
+      - name: Unit tests and APK build
+        id: build
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug             2>&1 | tee build-full.log
+
+          status=${PIPESTATUS[0]}
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Create smart diagnostic
+        if: steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          {
+            echo "WAKTU SOLAT MALAYSIA BUILD DIAGNOSE"
+            echo "==================================="
+            echo
+            echo "RESULT: FAILED"
+            echo "BUILD EXIT CODE: ${{ steps.build.outputs.exit_code }}"
+            echo
+            echo "BUILD CONFIG"
+            echo "------------"
+            grep -E 'compileSdk|targetSdk|compose-bom' app/build.gradle.kts || true
+            grep -E 'com.android.application|org.jetbrains.kotlin.plugin.compose' build.gradle.kts || true
+            echo
+            echo "PRIMARY ERROR CANDIDATES"
+            echo "------------------------"
+            grep -nEi               '(^e: |error:|FAILURE:|What went wrong|Execution failed|Could not resolve|Could not find|A problem occurred|Caused by:|requires.*compileSdk|minCompileSdk|Unresolved reference|Compilation error)'               build-full.log | tail -n 100 || true
+            echo
+            echo "LAST 180 LOG LINES"
+            echo "------------------"
+            tail -n 180 build-full.log || true
+          } > build-diagnose.txt
+
+          cat build-diagnose.txt
+
+      - name: Upload failure diagnostic
+        if: steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Waktu-Solat-Malaysia-build-diagnose
+          path: |
+            build-diagnose.txt
+            build-full.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail workflow when build failed
+        if: steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "Build failed. Download Waktu-Solat-Malaysia-build-diagnose artifact."
+          exit 1
+
+      - name: Verify APK
+        if: steps.build.outcome == 'success'
+        shell: bash
+        run: |
+          set -e
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-sha256.txt
+
+      - name: Upload APK
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Waktu-Solat-Malaysia-M1-debug
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
