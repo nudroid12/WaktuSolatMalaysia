@@ -106,3 +106,17 @@ M8 is committed only after unit tests, debug and release compilation, debug and 
 - Tapping an azan test button again while a test is playing stops the test instead of restarting it.
 - Test azan stops when the app leaves the foreground.
 - Scheduled real azan is not stopped by leaving the app, so prayer-time playback still works as intended.
+
+## M9 Release Candidate
+
+M9 freezes product features and prepares the app for release validation.
+
+- Version 0.9.0, versionCode 15.
+- Release builds enable R8 code shrinking and Android resource shrinking.
+- Conservative keep rules protect the foreground azan service, alarm receivers,
+  and WorkManager refresh worker.
+- Release signing is optional and activated only when all four signing
+  environment variables are present.
+- GitHub Actions builds debug APK, release APK, and release AAB, audits
+  permissions/background behavior, records checksums and sizes, and preserves
+  detailed diagnostics on failure.
