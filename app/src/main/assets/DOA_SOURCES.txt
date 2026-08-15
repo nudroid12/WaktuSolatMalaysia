@@ -1,0 +1,23 @@
+Waktu Solat & Kiblat - M9.2 Doa Harian
+========================================
+
+Doa Harian is text-only and available offline.
+
+Reference policy:
+- Quranic entries identify the surah and ayah.
+- Hadith entries identify the named collection and hadith number.
+- Arabic wording was cross-checked against Quran.com and Sunnah.com during M9.2 preparation.
+- Malay text in the app is a concise meaning written for this app, not a copied official translation.
+
+Included references:
+Sahih al-Bukhari 6324
+Sahih al-Bukhari 6322
+Sunan Abi Dawud 30
+Sahih al-Bukhari 5376
+Jami' at-Tirmidhi 3458
+Sunan Abi Dawud 5095
+Sahih Muslim 713a
+Al-Quran, Az-Zukhruf 43:13-14
+Al-Quran, Al-Isra' 17:24
+Al-Quran, Taha 20:114
+Al-Quran, Al-Baqarah 2:201

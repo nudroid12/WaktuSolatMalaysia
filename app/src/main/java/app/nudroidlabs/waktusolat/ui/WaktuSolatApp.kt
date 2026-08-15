@@ -81,7 +81,7 @@ private val LightColours = lightColorScheme(
 
 enum class AppTab(val label: String, val shortLabel: String) {
     HOME("Utama", "U"),
-    WEEK("7 Hari", "7"),
+    DOA("Doa", "D"),
     QIBLA("Kiblat", "K"),
     SETTINGS("Tetapan", "T")
 }
@@ -557,14 +557,8 @@ private fun PrayerAppShell(
                 onRefresh = { reloadNonce++ }
             )
 
-            AppTab.WEEK -> WeekScreen(
-                modifier = Modifier.padding(inner),
-                zoneCode = zoneCode,
-                data = data,
-                loading = loading,
-                error = error,
-                timeFormatMode = timeFormatMode,
-                onRefresh = { reloadNonce++ }
+            AppTab.DOA -> DoaScreen(
+                modifier = Modifier.padding(inner)
             )
 
             AppTab.QIBLA -> QiblaScreen(
@@ -711,12 +705,6 @@ private fun PrayerAppShell(
         AlertDialog(
             onDismissRequest = { showExitConfirmation = false },
             title = { Text("Keluar Waktu Solat & Kiblat?") },
-            text = {
-                Text(
-                    "Aplikasi akan ditutup dan audio yang sedang dimainkan akan dihentikan. " +
-                        "Jadual azan dan notifikasi waktu solat akan kekal aktif."
-                )
-            },
             confirmButton = {
                 TextButton(
                     onClick = {

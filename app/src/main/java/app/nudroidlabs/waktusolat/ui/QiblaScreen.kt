@@ -2,8 +2,6 @@ package app.nudroidlabs.waktusolat.ui
 
 import android.media.AudioManager
 import android.media.ToneGenerator
-import android.os.VibrationEffect
-import android.os.Vibrator
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -184,12 +182,8 @@ private fun QiblaCompassCard(
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-    val context = LocalContext.current
     val relative = trueHeading?.let { QiblaCalculator.relativeDegrees(qiblaBearing, it.toDouble()) }
     val alignmentGate = remember(qiblaBearing) { QiblaAlignmentGate() }
-    val vibrator = remember(context) {
-        runCatching { context.getSystemService(Vibrator::class.java) }.getOrNull()
-    }
     val toneGenerator = remember {
         runCatching {
             ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
@@ -204,16 +198,6 @@ private fun QiblaCompassCard(
 
     LaunchedEffect(relative) {
         if (alignmentGate.shouldNotify(relative)) {
-            if (vibrator?.hasVibrator() == true) {
-                runCatching {
-                    vibrator.vibrate(
-                        VibrationEffect.createOneShot(
-                            90L,
-                            VibrationEffect.DEFAULT_AMPLITUDE
-                        )
-                    )
-                }
-            }
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 260)
         }
     }
@@ -313,7 +297,7 @@ private fun QiblaCompassCard(
                     if (kotlin.math.abs(offset) <= 3.0) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Bunyi dan getaran mengesahkan arah sejajar.",
+                            "Bunyi mengesahkan arah sejajar.",
                             fontSize = 12.sp
                         )
                     }

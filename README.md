@@ -129,3 +129,13 @@ M9 freezes product features and prepares the app for release validation.
 - Confirming exit stops active azan/test playback and removes the app task.
 - Scheduled prayer alarms, notifications, and periodic refresh remain intact after exit.
 - Version 0.9.1, versionCode 16.
+
+## M9.2 Doa & Cleanup
+
+- Replaces the 7 Hari bottom tab with a lightweight offline Doa Harian tab.
+- Includes 13 text-only entries with Arabic, Rumi, concise Malay meaning, and a reference on every card.
+- No doa images, audio, network calls, or background work are added.
+- Removes Qibla alignment vibration while keeping the alignment sound and anti-jitter gate.
+- Keeps android.permission.VIBRATE because the existing prayer notification alert style still supports vibration.
+- Removes the explanatory paragraph from the exit confirmation dialog.
+- Version 0.9.2, versionCode 17.
