@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import app.nudroidlabs.waktusolat.audio.AzanPlaybackService
 import app.nudroidlabs.waktusolat.ui.WaktuSolatApp
 
 class MainActivity : ComponentActivity() {
@@ -26,5 +27,10 @@ class MainActivity : ComponentActivity() {
         } else {
             hasResumedOnce = true
         }
+    }
+
+    override fun onStop() {
+        AzanPlaybackService.stopPreview(applicationContext)
+        super.onStop()
     }
 }

@@ -104,12 +104,12 @@ fun HomeScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                     )
                 ) {
-                    Column(Modifier.padding(22.dp)) {
+                    Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
                         Text(
                             "SOLAT SETERUSNYA",
                             color = MaterialTheme.colorScheme.primary,
@@ -122,25 +122,25 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.Bottom
                         ) {
-                            Text(upcoming.name, fontSize = 36.sp, fontWeight = FontWeight.Bold)
+                            Text(upcoming.name, fontSize = 31.sp, fontWeight = FontWeight.Bold)
                             Text(
                                 PrayerTimeDisplayFormatter.formatLocalTime(
                                     upcoming.target.toLocalTime(),
                                     timeFormatMode
                                 ),
-                                fontSize = 25.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(7.dp))
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
                         ) {
                             Text(
                                 "Lagi ${PrayerTimeEngine.countdown(upcoming.target, now)}",
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                                fontSize = 17.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -176,17 +176,6 @@ fun HomeScreen(
                         Button(onClick = onRefresh) { Text("Cuba lagi") }
                     }
                 }
-            }
-        }
-
-        if (today != null) {
-            item {
-                PrayerTimesCard(
-                    day = today,
-                    title = "Waktu hari ini",
-                    highlightedPrayer = upcoming?.name,
-                    timeFormatMode = timeFormatMode
-                )
             }
         }
 
@@ -263,6 +252,17 @@ fun HomeScreen(
                     message,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
                     fontSize = 11.sp
+                )
+            }
+        }
+
+        if (today != null) {
+            item {
+                PrayerTimesCard(
+                    day = today,
+                    title = "Waktu hari ini",
+                    highlightedPrayer = upcoming?.name,
+                    timeFormatMode = timeFormatMode
                 )
             }
         }

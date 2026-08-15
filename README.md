@@ -97,3 +97,12 @@ M8 is committed only after unit tests, debug and release compilation, debug and 
 - Moves the compact Location/Zone card below today's prayer times.
 - Keeps manual zone selection and one-tap GPS in the compact location card.
 - Compacts the data status card and replaces the large refresh button with a refresh icon.
+
+## M8.4 v4 playback fixes
+
+- Moves the compact location card above today's prayer times.
+- Reduces the size of the next-prayer card without removing information.
+- Azan volume changes now apply immediately to audio that is already playing.
+- Tapping an azan test button again while a test is playing stops the test instead of restarting it.
+- Test azan stops when the app leaves the foreground.
+- Scheduled real azan is not stopped by leaving the app, so prayer-time playback still works as intended.

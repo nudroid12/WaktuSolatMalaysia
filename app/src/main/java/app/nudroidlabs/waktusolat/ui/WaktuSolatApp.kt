@@ -649,6 +649,7 @@ private fun PrayerAppShell(
                     val safePercent = percent.coerceIn(0, 100)
                     AzanPreferences.setVolumePercent(appContext, safePercent)
                     azanVolumePercent = safePercent
+                    AzanPlaybackService.applyVolume(appContext)
                     settingsRevision++
                 },
                 onAzanPrayerChange = { prayer, enabled ->

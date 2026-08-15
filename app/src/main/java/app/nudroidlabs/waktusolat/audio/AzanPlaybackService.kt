@@ -23,6 +23,7 @@ import app.nudroidlabs.waktusolat.R
 class AzanPlaybackService : Service() {
     private var player: MediaPlayer? = null
     private var focusRequest: AudioFocusRequest? = null
+    private var currentPlaybackIsPreview = false
     private val handler = Handler(Looper.getMainLooper())
     private val stopSafety = Runnable { stopPlayback() }
 
@@ -31,6 +32,10 @@ class AzanPlaybackService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopPlayback()
+            ACTION_STOP_PREVIEW -> {
+                if (currentPlaybackIsPreview) stopPlayback()
+            }
+            ACTION_SET_VOLUME -> applyCurrentVolume()
             ACTION_PLAY -> {
                 val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME)
                     ?.takeIf(String::isNotBlank)
@@ -43,7 +48,9 @@ class AzanPlaybackService : Service() {
                 val source = sourceOverride ?: AzanPreferences.source(this)
                 val uri = playbackUri(prayerName, source)
 
-                if (uri == null) {
+                if (preview && currentPlaybackIsPreview && player != null) {
+                    stopPlayback()
+                } else if (uri == null) {
                     stopSelf()
                 } else {
                     startPlayback(
@@ -85,6 +92,7 @@ class AzanPlaybackService : Service() {
         source: AzanAudioSource
     ) {
         stopPlayback(stopService = false)
+        currentPlaybackIsPreview = preview
         createChannel()
         startForeground(
             NOTIFICATION_ID,
@@ -120,8 +128,7 @@ class AzanPlaybackService : Service() {
                 setAudioAttributes(attributes)
                 setDataSource(this@AzanPlaybackService, uri)
                 setOnPreparedListener {
-                    val gain = AzanPreferences.volumePercent(this@AzanPlaybackService) / 100f
-                    it.setVolume(gain, gain)
+                    applyCurrentVolume(it)
                     it.start()
                     handler.removeCallbacks(stopSafety)
                     handler.postDelayed(stopSafety, MAX_PLAYBACK_MS)
@@ -142,8 +149,16 @@ class AzanPlaybackService : Service() {
             .onFailure { stopPlayback() }
     }
 
+    private fun applyCurrentVolume(target: MediaPlayer? = player) {
+        val gain = AzanPreferences.volumePercent(this) / 100f
+        target?.let { mediaPlayer ->
+            runCatching { mediaPlayer.setVolume(gain, gain) }
+        }
+    }
+
     private fun stopPlayback(stopService: Boolean = true) {
         handler.removeCallbacks(stopSafety)
+        currentPlaybackIsPreview = false
 
         player?.let { mediaPlayer ->
             runCatching {
@@ -214,6 +229,8 @@ class AzanPlaybackService : Service() {
         private const val NOTIFICATION_ID = 3100
         private const val ACTION_PLAY = "app.nudroidlabs.waktusolat.AZAN_PLAY"
         private const val ACTION_STOP = "app.nudroidlabs.waktusolat.AZAN_STOP"
+        private const val ACTION_STOP_PREVIEW = "app.nudroidlabs.waktusolat.AZAN_STOP_PREVIEW"
+        private const val ACTION_SET_VOLUME = "app.nudroidlabs.waktusolat.AZAN_SET_VOLUME"
         private const val EXTRA_PRAYER_NAME = "prayer_name"
         private const val EXTRA_PREVIEW = "preview"
         private const val EXTRA_SOURCE = "source"
@@ -238,6 +255,18 @@ class AzanPlaybackService : Service() {
 
         fun stop(context: Context) {
             runCatching { context.startService(stopIntent(context)) }
+        }
+
+        fun stopPreview(context: Context) {
+            val intent = Intent(context, AzanPlaybackService::class.java)
+                .setAction(ACTION_STOP_PREVIEW)
+            runCatching { context.startService(intent) }
+        }
+
+        fun applyVolume(context: Context) {
+            val intent = Intent(context, AzanPlaybackService::class.java)
+                .setAction(ACTION_SET_VOLUME)
+            runCatching { context.startService(intent) }
         }
 
         fun stopPendingIntent(context: Context): PendingIntent = PendingIntent.getService(
