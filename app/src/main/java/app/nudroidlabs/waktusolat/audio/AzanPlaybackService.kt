@@ -10,6 +10,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -35,11 +36,22 @@ class AzanPlaybackService : Service() {
                     ?.takeIf(String::isNotBlank)
                     ?: "Waktu solat"
                 val preview = intent.getBooleanExtra(EXTRA_PREVIEW, false)
-                val uri = AzanPreferences.audioUri(this)
-                if (uri.isNullOrBlank()) {
+                val sourceOverride = intent.getStringExtra(EXTRA_SOURCE)
+                    ?.let { raw ->
+                        AzanAudioSource.entries.firstOrNull { it.name == raw }
+                    }
+                val source = sourceOverride ?: AzanPreferences.source(this)
+                val uri = playbackUri(prayerName, source)
+
+                if (uri == null) {
                     stopSelf()
                 } else {
-                    startPlayback(prayerName, uri, preview)
+                    startPlayback(
+                        prayerName = prayerName,
+                        uri = uri,
+                        preview = preview,
+                        source = source
+                    )
                 }
             }
         }
@@ -51,10 +63,33 @@ class AzanPlaybackService : Service() {
         super.onDestroy()
     }
 
-    private fun startPlayback(prayerName: String, uriText: String, preview: Boolean) {
+    private fun playbackUri(prayerName: String, source: AzanAudioSource): Uri? =
+        when (source) {
+            AzanAudioSource.BUILT_IN -> {
+                val resId = if (prayerName == "Subuh") {
+                    R.raw.azan_builtin_subuh
+                } else {
+                    R.raw.azan_builtin_normal
+                }
+                "android.resource://$packageName/$resId".toUri()
+            }
+
+            AzanAudioSource.CUSTOM ->
+                AzanPreferences.audioUri(this)?.toUri()
+        }
+
+    private fun startPlayback(
+        prayerName: String,
+        uri: Uri,
+        preview: Boolean,
+        source: AzanAudioSource
+    ) {
         stopPlayback(stopService = false)
         createChannel()
-        startForeground(NOTIFICATION_ID, playbackNotification(prayerName, preview))
+        startForeground(
+            NOTIFICATION_ID,
+            playbackNotification(prayerName, preview, source)
+        )
 
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val attributes = AudioAttributes.Builder()
@@ -83,7 +118,7 @@ class AzanPlaybackService : Service() {
         val mediaPlayer = runCatching {
             MediaPlayer().apply {
                 setAudioAttributes(attributes)
-                setDataSource(this@AzanPlaybackService, uriText.toUri())
+                setDataSource(this@AzanPlaybackService, uri)
                 setOnPreparedListener {
                     it.start()
                     handler.removeCallbacks(stopSafety)
@@ -129,7 +164,8 @@ class AzanPlaybackService : Service() {
 
     private fun playbackNotification(
         prayerName: String,
-        preview: Boolean
+        preview: Boolean,
+        source: AzanAudioSource
     ): android.app.Notification {
         val openApp = PendingIntent.getActivity(
             this,
@@ -138,17 +174,22 @@ class AzanPlaybackService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val stopIntent = stopPendingIntent(this)
+
+        val sourceText = when (source) {
+            AzanAudioSource.BUILT_IN ->
+                if (prayerName == "Subuh") "Azan Subuh terbina dalam" else "Azan terbina dalam"
+            AzanAudioSource.CUSTOM -> "Fail azan sendiri"
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(if (preview) "Ujian azan" else "Azan $prayerName")
-            .setContentText(if (preview) "Pratonton audio pilihan" else "Audio azan sedang dimainkan")
+            .setContentText(if (preview) sourceText else "$sourceText sedang dimainkan")
             .setContentIntent(openApp)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(0, "Henti", stopIntent)
+            .addAction(0, "Henti", stopPendingIntent(this))
             .build()
     }
 
@@ -173,6 +214,7 @@ class AzanPlaybackService : Service() {
         private const val ACTION_STOP = "app.nudroidlabs.waktusolat.AZAN_STOP"
         private const val EXTRA_PRAYER_NAME = "prayer_name"
         private const val EXTRA_PREVIEW = "preview"
+        private const val EXTRA_SOURCE = "source"
         private const val MAX_PLAYBACK_MS = 10 * 60 * 1000L
 
         fun start(context: Context, prayerName: String) {
@@ -183,11 +225,12 @@ class AzanPlaybackService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun preview(context: Context) {
+        fun preview(context: Context, prayerName: String, source: AzanAudioSource) {
             val intent = Intent(context, AzanPlaybackService::class.java)
                 .setAction(ACTION_PLAY)
-                .putExtra(EXTRA_PRAYER_NAME, "Ujian")
+                .putExtra(EXTRA_PRAYER_NAME, prayerName)
                 .putExtra(EXTRA_PREVIEW, true)
+                .putExtra(EXTRA_SOURCE, source.name)
             ContextCompat.startForegroundService(context, intent)
         }
 

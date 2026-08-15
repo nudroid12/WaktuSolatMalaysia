@@ -4,9 +4,9 @@ Developer: NudroidLabs
 
 Application ID: `app.nudroidlabs.waktusolat`
 
-Current milestone: M8.3
+Current milestone: M8.4
 
-Version: `0.8.3`
+Version: `0.8.4`
 
 ## Current scope
 
@@ -81,3 +81,12 @@ M8 is committed only after unit tests, debug and release compilation, debug and 
 - Keeps Dhuha spelling, 12/24-hour format, GPS shortcut and all M8.2 Final settings.
 - Qibla alignment now uses Android Vibrator and VibrationEffect instead of Compose haptic feedback.
 - Qibla sound and the anti-jitter alignment latch remain enabled.
+
+## M8.4 Azan
+
+- Adds an offline built-in Fajr azan for Subuh.
+- Adds an offline built-in normal azan for Zohor, Asar, Maghrib and Isyak.
+- Keeps custom user-selected azan audio.
+- Azan source can be switched between built-in audio and a custom file.
+- Built-in audio is fetched by the build workflow from an Internet Archive item marked Public Domain Mark 1.0.
+- Playback continues to use an alarm-class audio foreground service and exact alarm access.

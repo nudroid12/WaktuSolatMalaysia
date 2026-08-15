@@ -1,0 +1,15 @@
+Waktu Solat & Kiblat built-in azan audio
+
+Source collection:
+Adhan Recordings from Doha, Qatar
+Internet Archive identifier: adhan.recordings.from.doha.qatar
+Marked on the Internet Archive item as Public Domain Mark 1.0.
+Recorded between 2013 and 2014.
+
+Bundled at build time:
+1. Adhan_Doha_Qatar_01_Fajr_Adhan.ogg
+   Used for Subuh.
+2. Adhan_Doha_Qatar_02_Dhuhr_Adhan.ogg
+   Used for Zohor, Asar, Maghrib and Isyak.
+
+The app also continues to support a user-selected custom audio file.

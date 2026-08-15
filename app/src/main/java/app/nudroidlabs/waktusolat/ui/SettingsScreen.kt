@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nudroidlabs.waktusolat.BuildConfig
+import app.nudroidlabs.waktusolat.audio.AzanAudioSource
 import app.nudroidlabs.waktusolat.data.JakimZones
 import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import app.nudroidlabs.waktusolat.location.ZoneSuggestion
@@ -56,6 +57,7 @@ fun SettingsScreen(
     hasExactAlarmAccess: Boolean,
     scheduleMessage: String?,
     azanEnabled: Boolean,
+    azanSource: AzanAudioSource,
     azanAudioName: String?,
     azanEnabledPrayers: Map<String, Boolean>,
     onChooseZone: () -> Unit,
@@ -72,8 +74,9 @@ fun SettingsScreen(
     onOpenNotificationSettings: () -> Unit,
     onPickAzanAudio: () -> Unit,
     onAzanEnabledChange: (Boolean) -> Unit,
+    onAzanSourceChange: (AzanAudioSource) -> Unit,
     onAzanPrayerChange: (String, Boolean) -> Unit,
-    onTestAzan: () -> Unit,
+    onTestAzan: (String, AzanAudioSource) -> Unit,
     onStopAzan: () -> Unit,
     onClearAzanAudio: () -> Unit
 ) {
@@ -201,10 +204,12 @@ fun SettingsScreen(
             item {
                 AzanSettingsCard(
                     enabled = azanEnabled,
+                    source = azanSource,
                     audioName = azanAudioName,
                     prayerEnabled = azanEnabledPrayers,
                     hasExactAlarmAccess = hasExactAlarmAccess,
                     onEnabledChange = onAzanEnabledChange,
+                    onSourceChange = onAzanSourceChange,
                     onPrayerChange = onAzanPrayerChange,
                     onPickAudio = onPickAzanAudio,
                     onTestAudio = onTestAzan,
@@ -501,18 +506,21 @@ private fun PermissionMessage(
 @Composable
 private fun AzanSettingsCard(
     enabled: Boolean,
+    source: AzanAudioSource,
     audioName: String?,
     prayerEnabled: Map<String, Boolean>,
     hasExactAlarmAccess: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    onSourceChange: (AzanAudioSource) -> Unit,
     onPrayerChange: (String, Boolean) -> Unit,
     onPickAudio: () -> Unit,
-    onTestAudio: () -> Unit,
+    onTestAudio: (String, AzanAudioSource) -> Unit,
     onStopAudio: () -> Unit,
     onClearAudio: () -> Unit,
     onRequestExactAlarm: () -> Unit
 ) {
-    val hasAudio = !audioName.isNullOrBlank()
+    val hasCustomAudio = !audioName.isNullOrBlank()
+    val hasPlayableAudio = source == AzanAudioSource.BUILT_IN || hasCustomAudio
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -525,20 +533,58 @@ private fun AzanSettingsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Azan penuh", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text("Gunakan fail audio pilihan sendiri dan pilih solat yang memainkannya.", fontSize = 12.sp)
+                    Text(
+                        "Azan penuh",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Azan terbina dalam boleh digunakan offline. Fail sendiri masih disokong.",
+                        fontSize = 12.sp
+                    )
                 }
                 Switch(
-                    checked = enabled && hasAudio,
+                    checked = enabled && hasPlayableAudio,
                     onCheckedChange = { value ->
-                        if (hasAudio) onEnabledChange(value) else if (value) onPickAudio()
+                        if (hasPlayableAudio) {
+                            onEnabledChange(value)
+                        } else if (value) {
+                            onPickAudio()
+                        }
                     }
                 )
             }
 
+            Spacer(Modifier.height(12.dp))
+            Text("Sumber audio", fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AzanAudioSource.entries.forEach { item ->
+                    FilterChip(
+                        selected = source == item,
+                        onClick = {
+                            if (item == AzanAudioSource.CUSTOM && !hasCustomAudio) {
+                                onPickAudio()
+                            } else {
+                                onSourceChange(item)
+                            }
+                        },
+                        label = { Text(item.label) }
+                    )
+                }
+            }
+
             Spacer(Modifier.height(10.dp))
-            if (hasAudio) {
-                Text("Audio: $audioName", fontWeight = FontWeight.SemiBold)
+            if (source == AzanAudioSource.BUILT_IN) {
+                Text(
+                    "Subuh menggunakan rakaman Fajr. Zohor, Asar, Maghrib dan Isyak menggunakan rakaman azan biasa.",
+                    fontSize = 12.sp
+                )
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -546,19 +592,69 @@ private fun AzanSettingsCard(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(onClick = onTestAudio) { Text("Uji azan") }
-                    OutlinedButton(onClick = onStopAudio) { Text("Henti") }
-                    OutlinedButton(onClick = onPickAudio) { Text("Tukar audio") }
-                    OutlinedButton(onClick = onClearAudio) { Text("Buang") }
+                    Button(
+                        onClick = {
+                            onTestAudio("Zohor", AzanAudioSource.BUILT_IN)
+                        }
+                    ) {
+                        Text("Uji azan biasa")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            onTestAudio("Subuh", AzanAudioSource.BUILT_IN)
+                        }
+                    ) {
+                        Text("Uji azan Subuh")
+                    }
+                    OutlinedButton(onClick = onStopAudio) {
+                        Text("Henti")
+                    }
                 }
+
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Rakaman terbina dalam ditandai Public Domain Mark 1.0 pada Internet Archive.",
+                    fontSize = 11.sp
+                )
             } else {
-                Button(onClick = onPickAudio) { Text("Pilih fail azan") }
+                if (hasCustomAudio) {
+                    Text("Audio: $audioName", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                onTestAudio("Ujian", AzanAudioSource.CUSTOM)
+                            }
+                        ) {
+                            Text("Uji azan")
+                        }
+                        OutlinedButton(onClick = onStopAudio) {
+                            Text("Henti")
+                        }
+                        OutlinedButton(onClick = onPickAudio) {
+                            Text("Tukar audio")
+                        }
+                        OutlinedButton(onClick = onClearAudio) {
+                            Text("Buang")
+                        }
+                    }
+                } else {
+                    Button(onClick = onPickAudio) {
+                        Text("Pilih fail azan")
+                    }
+                }
             }
 
-            if (enabled && hasAudio) {
+            if (enabled && hasPlayableAudio) {
                 Spacer(Modifier.height(14.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(6.dp))
+
                 PrayerAlarmScheduler.prayerNames.forEachIndexed { index, prayer ->
                     Row(
                         modifier = Modifier
@@ -582,7 +678,7 @@ private fun AzanSettingsCard(
             if (!hasExactAlarmAccess) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Azan penuh memerlukan akses alarm tepat supaya Android membenarkan tindakan tepat pada waktunya ketika app di latar belakang.",
+                    "Azan penuh memerlukan akses alarm tepat untuk playback tepat pada waktu ketika app di latar belakang.",
                     fontSize = 12.sp
                 )
                 Spacer(Modifier.height(6.dp))
@@ -593,7 +689,7 @@ private fun AzanSettingsCard(
 
             Spacer(Modifier.height(10.dp))
             Text(
-                "Ujian azan bermula serta-merta. Playback sebenar berhenti apabila audio tamat atau selepas had keselamatan 10 minit.",
+                "Azan berhenti apabila audio tamat, apabila audio focus hilang, atau selepas had keselamatan 10 minit.",
                 fontSize = 12.sp
             )
         }

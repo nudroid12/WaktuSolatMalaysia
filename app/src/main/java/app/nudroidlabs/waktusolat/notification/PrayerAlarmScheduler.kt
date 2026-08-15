@@ -164,7 +164,11 @@ object PrayerAlarmScheduler {
 
     fun scheduleNeeded(context: Context): Boolean =
         notificationsEnabled(context) ||
-            (AzanPreferences.enabled(context) && canScheduleExact(context))
+            (
+                AzanPreferences.enabled(context) &&
+                    AzanPreferences.hasPlayableAudio(context) &&
+                    canScheduleExact(context)
+                )
 
     fun reschedule(
         context: Context,

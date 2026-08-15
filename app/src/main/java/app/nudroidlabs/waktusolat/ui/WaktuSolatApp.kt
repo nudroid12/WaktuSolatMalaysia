@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import app.nudroidlabs.waktusolat.audio.AzanAudioSource
 import app.nudroidlabs.waktusolat.audio.AzanPlaybackService
 import app.nudroidlabs.waktusolat.audio.AzanPreferences
 import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
@@ -181,6 +182,7 @@ private fun PrayerAppShell(
     }
     var alertStyle by remember { mutableStateOf(PrayerAlarmScheduler.alertStyle(appContext)) }
     var azanEnabled by remember { mutableStateOf(AzanPreferences.enabled(appContext)) }
+    var azanSource by remember { mutableStateOf(AzanPreferences.source(appContext)) }
     var azanUri by remember { mutableStateOf(AzanPreferences.audioUri(appContext)) }
     var azanEnabledPrayers by remember {
         mutableStateOf(
@@ -305,6 +307,7 @@ private fun PrayerAppShell(
             }
             AzanPreferences.setAudioUri(appContext, uri.toString())
             AzanPreferences.setEnabled(appContext, true)
+            azanSource = AzanAudioSource.CUSTOM
             azanUri = uri.toString()
             azanEnabled = true
             settingsRevision++
@@ -577,6 +580,7 @@ private fun PrayerAppShell(
                 hasExactAlarmAccess = PrayerAlarmScheduler.canScheduleExact(appContext),
                 scheduleMessage = scheduleMessage,
                 azanEnabled = azanEnabled,
+                azanSource = azanSource,
                 azanAudioName = audioName,
                 azanEnabledPrayers = azanEnabledPrayers,
                 onChooseZone = { showZones = true },
@@ -631,6 +635,12 @@ private fun PrayerAppShell(
                     }
                     settingsRevision++
                 },
+                onAzanSourceChange = { source ->
+                    AzanPlaybackService.stop(appContext)
+                    AzanPreferences.setSource(appContext, source)
+                    azanSource = source
+                    settingsRevision++
+                },
                 onAzanPrayerChange = { prayer, enabled ->
                     AzanPreferences.setPrayerEnabled(appContext, prayer, enabled)
                     azanEnabledPrayers = azanEnabledPrayers.toMutableMap().apply {
@@ -638,18 +648,27 @@ private fun PrayerAppShell(
                     }
                     settingsRevision++
                 },
-                onTestAzan = {
-                    if (!AzanPreferences.audioUri(appContext).isNullOrBlank()) {
-                        runCatching { AzanPlaybackService.preview(appContext) }
-                            .onFailure { scheduleMessage = "Ujian azan tidak dapat dimulakan." }
+                onTestAzan = { prayer, source ->
+                    val canPreview = source == AzanAudioSource.BUILT_IN ||
+                        !AzanPreferences.audioUri(appContext).isNullOrBlank()
+                    if (canPreview) {
+                        runCatching {
+                            AzanPlaybackService.preview(
+                                context = appContext,
+                                prayerName = prayer,
+                                source = source
+                            )
+                        }.onFailure {
+                            scheduleMessage = "Ujian azan tidak dapat dimulakan."
+                        }
                     }
                 },
                 onStopAzan = { AzanPlaybackService.stop(appContext) },
                 onClearAzanAudio = {
                     AzanPlaybackService.stop(appContext)
                     AzanPreferences.clearAudioUri(appContext)
+                    azanSource = AzanAudioSource.BUILT_IN
                     azanUri = null
-                    azanEnabled = false
                     settingsRevision++
                 }
             )
