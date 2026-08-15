@@ -42,6 +42,9 @@ class LocationZoneDetector(private val context: Context) {
     private val locationManager =
         context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
+    fun isLocationEnabled(): Boolean =
+        LocationManagerCompat.isLocationEnabled(locationManager)
+
     @SuppressLint("MissingPermission")
     suspend fun detect(): Result<ZoneSuggestion> = runCatching {
         val location = withTimeout(20_000L) { obtainLocation() }

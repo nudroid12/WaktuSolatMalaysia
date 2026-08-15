@@ -4,9 +4,9 @@ Developer: NudroidLabs
 
 Application ID: `app.nudroidlabs.waktusolat`
 
-Current milestone: M8
+Current milestone: M8.2
 
-Version: `0.8.0`
+Version: `0.8.2`
 
 ## Current scope
 
@@ -58,3 +58,11 @@ The zone code is replaced with the selected JAKIM zone. Network and cached respo
 The project targets Android API 37 and uses JDK 17, Gradle 9.4.1 and Android Build Tools 36.0.0 in GitHub Actions.
 
 M8 is committed only after unit tests, debug and release compilation, debug and release lint, and the hardening audit all pass.
+
+## M8.2 polish
+
+- Home GPS detects whether phone Location is disabled before requesting a fix.
+- If Location is disabled, an in-app prompt offers to open Android Location settings.
+- Location detection resumes after returning when Location has been enabled.
+- Qibla alignment gives one short haptic confirmation and acknowledgement tone.
+- Qibla feedback is latched and only rearms after moving clearly away from alignment.

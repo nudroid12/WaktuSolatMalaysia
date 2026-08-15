@@ -1,5 +1,7 @@
 package app.nudroidlabs.waktusolat.ui
 
+import android.media.AudioManager
+import android.media.ToneGenerator
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,13 +30,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nudroidlabs.waktusolat.data.PrayerTimeDisplayFormatter
 import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import app.nudroidlabs.waktusolat.location.SavedLocation
+import app.nudroidlabs.waktusolat.qibla.QiblaAlignmentGate
 import app.nudroidlabs.waktusolat.qibla.QiblaCalculator
 import app.nudroidlabs.waktusolat.qibla.QiblaSensor
 import java.util.Locale
@@ -178,7 +184,27 @@ private fun QiblaCompassCard(
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+    val hapticFeedback = LocalHapticFeedback.current
     val relative = trueHeading?.let { QiblaCalculator.relativeDegrees(qiblaBearing, it.toDouble()) }
+    val alignmentGate = remember(qiblaBearing) { QiblaAlignmentGate() }
+    val toneGenerator = remember {
+        runCatching {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
+        }.getOrNull()
+    }
+
+    DisposableEffect(toneGenerator) {
+        onDispose {
+            toneGenerator?.release()
+        }
+    }
+
+    LaunchedEffect(relative) {
+        if (alignmentGate.shouldNotify(relative)) {
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 260)
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -272,6 +298,13 @@ private fun QiblaCompassCard(
                         else -> "Pusing ke kiri ${"%.0f".format(Locale.US, kotlin.math.abs(offset))}°"
                     }
                     Text(guidance, color = primary, fontWeight = FontWeight.Bold)
+                    if (kotlin.math.abs(offset) <= 3.0) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Bunyi dan getaran mengesahkan arah sejajar.",
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }

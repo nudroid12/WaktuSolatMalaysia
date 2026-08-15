@@ -11,8 +11,8 @@ android {
         applicationId = "app.nudroidlabs.waktusolat"
         minSdk = 26
         targetSdk = 37
-        versionCode = 9
-        versionName = "0.8.1"
+        versionCode = 10
+        versionName = "0.8.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

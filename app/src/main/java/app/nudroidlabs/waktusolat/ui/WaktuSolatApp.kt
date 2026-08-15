@@ -12,12 +12,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -135,6 +137,7 @@ private fun PrayerAppShell(
     var locationRevision by remember { mutableLongStateOf(0L) }
     var autoApplyDetectedZone by remember { mutableStateOf(false) }
     var homeLocationMessage by remember { mutableStateOf<String?>(null) }
+    var showLocationServicesDialog by remember { mutableStateOf(false) }
 
     var notificationsEnabled by remember {
         mutableStateOf(PrayerAlarmScheduler.notificationsEnabled(appContext))
@@ -193,6 +196,37 @@ private fun PrayerAppShell(
         }
     }
 
+    val locationSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (detector.isLocationEnabled()) {
+            val fineGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val coarseGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (fineGranted || coarseGranted) {
+                detectionNonce++
+            } else {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
+        } else {
+            val message = "Location telefon masih dimatikan."
+            locationMessage = message
+            if (autoApplyDetectedZone) homeLocationMessage = message
+            autoApplyDetectedZone = false
+        }
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
@@ -228,6 +262,11 @@ private fun PrayerAppShell(
         locationMessage = null
         zoneSuggestion = null
         if (autoApplyZone) homeLocationMessage = null
+
+        if (!detector.isLocationEnabled()) {
+            showLocationServicesDialog = true
+            return
+        }
 
         val fineGranted = ContextCompat.checkSelfPermission(
             context,
@@ -544,6 +583,61 @@ private fun PrayerAppShell(
             onSelect = {
                 showZones = false
                 setZone(it)
+            }
+        )
+    }
+
+    if (showLocationServicesDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showLocationServicesDialog = false
+                val message = "Location perlu dihidupkan untuk menggunakan fungsi ini."
+                locationMessage = message
+                if (autoApplyDetectedZone) homeLocationMessage = message
+                autoApplyDetectedZone = false
+            },
+            title = { Text("Hidupkan Location") },
+            text = {
+                Text(
+                    "Location/GPS telefon sedang dimatikan. Hidupkan Location untuk " +
+                        "mengesan zon solat dan arah kiblat."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLocationServicesDialog = false
+                        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        runCatching {
+                            locationSettingsLauncher.launch(intent)
+                        }.onFailure {
+                            val fallback = Intent(Settings.ACTION_SETTINGS)
+                            runCatching {
+                                locationSettingsLauncher.launch(fallback)
+                            }.onFailure {
+                                val message = "Tetapan Location tidak dapat dibuka pada peranti ini."
+                                locationMessage = message
+                                if (autoApplyDetectedZone) homeLocationMessage = message
+                                autoApplyDetectedZone = false
+                            }
+                        }
+                    }
+                ) {
+                    Text("Buka tetapan lokasi")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showLocationServicesDialog = false
+                        val message = "Location perlu dihidupkan untuk menggunakan fungsi ini."
+                        locationMessage = message
+                        if (autoApplyDetectedZone) homeLocationMessage = message
+                        autoApplyDetectedZone = false
+                    }
+                ) {
+                    Text("Batal")
+                }
             }
         )
     }
