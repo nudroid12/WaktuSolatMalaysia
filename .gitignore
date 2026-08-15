@@ -8,3 +8,27 @@
 .externalNativeBuild/
 .cxx/
 app/build/
+
+# WSK CI generated outputs
+.gradle/
+build/
+app/build/
+*.log
+.m9-stage
+build-diagnose.txt
+junit-failures.txt
+release-sha256.txt
+m9-readiness.txt
+unit-test-summary.txt
+release-permissions.txt
+release-badging.txt
+debug-badging.txt
+zipalign-check.txt
+apksigner-check.txt
+apk-size-top.txt
+aab-size-top.txt
+bundled-audio-size.txt
+release-dependencies.txt
+release-apk-path.txt
+release-aab-path.txt
+repo-cleanup-report.txt

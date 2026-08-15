@@ -139,3 +139,16 @@ M9 freezes product features and prepares the app for release validation.
 - Keeps android.permission.VIBRATE because the existing prayer notification alert style still supports vibration.
 - Removes the explanatory paragraph from the exit confirmation dialog.
 - Version 0.9.2, versionCode 17.
+
+## M10 Final Release 1.0.0
+
+M10 freezes the M9.2 product exactly as approved and prepares the first final release.
+
+- Version 1.0.0, versionCode 18.
+- No UI redesign and no new product feature.
+- Keeps R8 minification and Android resource shrinking enabled for release.
+- Adds APK/AAB content-size analysis so the largest packaged files are visible.
+- Adds dependency, permission, battery/background, service/worker, alignment,
+  and release-output audits.
+- Produces final debug APK, release APK, release AAB, R8 mapping, SHA-256
+  checksums, signing report, size reports, and release-readiness report.
