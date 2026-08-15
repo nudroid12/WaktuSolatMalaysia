@@ -1,6 +1,7 @@
 package app.nudroidlabs.waktusolat.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -8,6 +9,7 @@ import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,6 +49,13 @@ import app.nudroidlabs.waktusolat.location.ZoneSuggestion
 import app.nudroidlabs.waktusolat.notification.PrayerAlarmScheduler
 import app.nudroidlabs.waktusolat.notification.PrayerAlertStyle
 import app.nudroidlabs.waktusolat.notification.PrayerRefreshWorker
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.api.ResolvableApiException
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationSettingsRequest
+import com.google.android.gms.location.Priority
 
 private val DarkColours = darkColorScheme(
     primary = Color(0xFFF4D58D),
@@ -118,6 +127,20 @@ private fun PrayerAppShell(
     val appContext = context.applicationContext
     val repository = remember { JakimPrayerRepository(appContext) }
     val detector = remember { LocationZoneDetector(appContext) }
+    val locationSettingsClient = remember { LocationServices.getSettingsClient(context) }
+    val locationSettingsRequest = remember {
+        val request = LocationRequest.Builder(
+            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+            10_000L
+        )
+            .setMaxUpdates(1)
+            .build()
+
+        LocationSettingsRequest.Builder()
+            .addLocationRequest(request)
+            .setAlwaysShow(true)
+            .build()
+    }
 
     var tab by remember { mutableStateOf(AppTab.HOME) }
     var zoneCode by remember { mutableStateOf(repository.savedZone()) }
@@ -227,6 +250,37 @@ private fun PrayerAppShell(
         }
     }
 
+    val locationResolutionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK || detector.isLocationEnabled()) {
+            val fineGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val coarseGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (fineGranted || coarseGranted) {
+                detectionNonce++
+            } else {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
+        } else {
+            val message = "Location tidak dihidupkan."
+            locationMessage = message
+            if (autoApplyDetectedZone) homeLocationMessage = message
+            autoApplyDetectedZone = false
+        }
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
@@ -263,30 +317,56 @@ private fun PrayerAppShell(
         zoneSuggestion = null
         if (autoApplyZone) homeLocationMessage = null
 
-        if (!detector.isLocationEnabled()) {
+        fun continueDetection() {
+            val fineGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val coarseGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (fineGranted || coarseGranted) {
+                detectionNonce++
+            } else {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
+        }
+
+        if (detector.isLocationEnabled()) {
+            continueDetection()
+            return
+        }
+
+        val playServicesAvailable = GoogleApiAvailability.getInstance()
+            .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+        if (!playServicesAvailable) {
             showLocationServicesDialog = true
             return
         }
 
-        val fineGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarseGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineGranted || coarseGranted) {
-            detectionNonce++
-        } else {
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
-        }
+        locationSettingsClient.checkLocationSettings(locationSettingsRequest)
+            .addOnSuccessListener {
+                continueDetection()
+            }
+            .addOnFailureListener { exception ->
+                if (exception is ResolvableApiException) {
+                    val request = IntentSenderRequest.Builder(exception.resolution).build()
+                    runCatching {
+                        locationResolutionLauncher.launch(request)
+                    }.onFailure {
+                        showLocationServicesDialog = true
+                    }
+                } else {
+                    showLocationServicesDialog = true
+                }
+            }
     }
 
     fun setNotifications(enabled: Boolean) {
@@ -599,8 +679,8 @@ private fun PrayerAppShell(
             title = { Text("Hidupkan Location") },
             text = {
                 Text(
-                    "Location/GPS telefon sedang dimatikan. Hidupkan Location untuk " +
-                        "mengesan zon solat dan arah kiblat."
+                    "Dialog sistem untuk hidupkan Location tidak tersedia pada peranti ini. " +
+                        "Buka tetapan Location untuk meneruskan."
                 )
             },
             confirmButton = {

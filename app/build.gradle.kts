@@ -11,7 +11,7 @@ android {
         applicationId = "app.nudroidlabs.waktusolat"
         minSdk = 26
         targetSdk = 37
-        versionCode = 10
+        versionCode = 11
         versionName = "0.8.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -45,6 +45,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("com.google.android.gms:play-services-location:21.4.0")
 
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")

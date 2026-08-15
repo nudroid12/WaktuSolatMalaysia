@@ -59,7 +59,7 @@ fun PrayerTimesCard(
             "Imsak" to day.imsak,
             "Subuh" to day.subuh,
             "Syuruk" to day.syuruk,
-            "Duha" to day.dhuha,
+            "Dhuha" to day.dhuha,
             "Zohor" to day.zohor,
             "Asar" to day.asar,
             "Maghrib" to day.maghrib,

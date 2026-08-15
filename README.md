@@ -66,3 +66,11 @@ M8 is committed only after unit tests, debug and release compilation, debug and 
 - Location detection resumes after returning when Location has been enabled.
 - Qibla alignment gives one short haptic confirmation and acknowledgement tone.
 - Qibla feedback is latched and only rearms after moving clearly away from alignment.
+
+## M8.2 Final polish
+
+- Home dipadatkan untuk memaparkan kandungan utama dalam satu skrin telefon biasa.
+- Label Duha ditukar kepada Dhuha.
+- Tetapan kini menggunakan seksyen yang boleh dikembangkan dan dicollapse.
+- Jika Location dimatikan, app cuba dialog sistem Android untuk menghidupkannya tanpa meninggalkan app.
+- Peranti tanpa resolution dialog masih mempunyai fallback ke tetapan Location.

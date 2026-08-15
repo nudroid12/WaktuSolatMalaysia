@@ -23,6 +23,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -74,108 +78,176 @@ fun SettingsScreen(
     onClearAzanAudio: () -> Unit
 ) {
     val zone = JakimZones.byCode(zoneCode)
+    var expandedSection by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun toggle(section: String) {
+        expandedSection = if (expandedSection == section) null else section
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         item {
             Column {
                 Text("Tetapan", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text("Waktu Solat & Kiblat ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.primary)
+                Text(
+                    "Waktu Solat & Kiblat ${BuildConfig.VERSION_NAME}",
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
 
-        item { SectionLabel("Paparan") }
-        item { AppearanceCard(mode = themeMode, onModeChange = onThemeModeChange) }
         item {
-            TimeFormatCard(
-                mode = timeFormatMode,
-                onModeChange = onTimeFormatModeChange
+            SettingsSectionHeader(
+                title = "Paparan",
+                summary = "${themeMode.label} · ${timeFormatMode.label}",
+                expanded = expandedSection == "display",
+                onClick = { toggle("display") }
             )
         }
+        if (expandedSection == "display") {
+            item { AppearanceCard(mode = themeMode, onModeChange = onThemeModeChange) }
+            item {
+                TimeFormatCard(
+                    mode = timeFormatMode,
+                    onModeChange = onTimeFormatModeChange
+                )
+            }
+        }
 
-        item { SectionLabel("Lokasi dan zon") }
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onChooseZone),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(Modifier.padding(18.dp)) {
-                    Text("Zon JAKIM", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text("$zoneCode · ${zone.state}", fontWeight = FontWeight.Bold)
-                    Text(zone.area, fontSize = 13.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Text("Tekan untuk pilih zon secara manual", fontSize = 12.sp)
+            SettingsSectionHeader(
+                title = "Lokasi & Zon",
+                summary = "$zoneCode · ${zone.state}",
+                expanded = expandedSection == "location",
+                onClick = { toggle("location") }
+            )
+        }
+        if (expandedSection == "location") {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onChooseZone),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        Text(
+                            "Zon JAKIM",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text("$zoneCode · ${zone.state}", fontWeight = FontWeight.Bold)
+                        Text(zone.area, fontSize = 13.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Tekan untuk pilih zon secara manual", fontSize = 12.sp)
+                    }
                 }
             }
+            item {
+                LocationCard(
+                    detecting = detectingLocation,
+                    message = locationMessage,
+                    suggestion = zoneSuggestion,
+                    currentZoneCode = zoneCode,
+                    onDetect = onDetectLocation,
+                    onUseSuggestion = onUseSuggestion
+                )
+            }
         }
 
         item {
-            LocationCard(
-                detecting = detectingLocation,
-                message = locationMessage,
-                suggestion = zoneSuggestion,
-                currentZoneCode = zoneCode,
-                onDetect = onDetectLocation,
-                onUseSuggestion = onUseSuggestion
+            SettingsSectionHeader(
+                title = "Notifikasi & Peringatan",
+                summary = if (notificationsEnabled) "Aktif" else "Tidak aktif",
+                expanded = expandedSection == "alerts",
+                onClick = { toggle("alerts") }
             )
         }
-
-        item { SectionLabel("Peringatan") }
-        item {
-            NotificationSettingsCard(
-                masterEnabled = notificationsEnabled,
-                prayerEnabled = enabledPrayers,
-                leadMinutesByPrayer = leadMinutesByPrayer,
-                alertStyle = alertStyle,
-                hasNotificationPermission = hasNotificationPermission,
-                hasExactAlarmAccess = hasExactAlarmAccess,
-                status = scheduleMessage,
-                onMasterChange = onMasterNotificationChange,
-                onPrayerChange = onPrayerChange,
-                onLeadMinutesChange = onLeadMinutesChange,
-                onAlertStyleChange = onAlertStyleChange,
-                onRequestNotificationPermission = onRequestNotificationPermission,
-                onRequestExactAlarm = onRequestExactAlarm,
-                onOpenNotificationSettings = onOpenNotificationSettings
-            )
+        if (expandedSection == "alerts") {
+            item {
+                NotificationSettingsCard(
+                    masterEnabled = notificationsEnabled,
+                    prayerEnabled = enabledPrayers,
+                    leadMinutesByPrayer = leadMinutesByPrayer,
+                    alertStyle = alertStyle,
+                    hasNotificationPermission = hasNotificationPermission,
+                    hasExactAlarmAccess = hasExactAlarmAccess,
+                    status = scheduleMessage,
+                    onMasterChange = onMasterNotificationChange,
+                    onPrayerChange = onPrayerChange,
+                    onLeadMinutesChange = onLeadMinutesChange,
+                    onAlertStyleChange = onAlertStyleChange,
+                    onRequestNotificationPermission = onRequestNotificationPermission,
+                    onRequestExactAlarm = onRequestExactAlarm,
+                    onOpenNotificationSettings = onOpenNotificationSettings
+                )
+            }
         }
 
-        item { SectionLabel("Azan") }
         item {
-            AzanSettingsCard(
-                enabled = azanEnabled,
-                audioName = azanAudioName,
-                prayerEnabled = azanEnabledPrayers,
-                hasExactAlarmAccess = hasExactAlarmAccess,
-                onEnabledChange = onAzanEnabledChange,
-                onPrayerChange = onAzanPrayerChange,
-                onPickAudio = onPickAzanAudio,
-                onTestAudio = onTestAzan,
-                onStopAudio = onStopAzan,
-                onClearAudio = onClearAzanAudio,
-                onRequestExactAlarm = onRequestExactAlarm
+            SettingsSectionHeader(
+                title = "Azan",
+                summary = if (azanEnabled) "Aktif" else "Tidak aktif",
+                expanded = expandedSection == "azan",
+                onClick = { toggle("azan") }
             )
         }
+        if (expandedSection == "azan") {
+            item {
+                AzanSettingsCard(
+                    enabled = azanEnabled,
+                    audioName = azanAudioName,
+                    prayerEnabled = azanEnabledPrayers,
+                    hasExactAlarmAccess = hasExactAlarmAccess,
+                    onEnabledChange = onAzanEnabledChange,
+                    onPrayerChange = onAzanPrayerChange,
+                    onPickAudio = onPickAzanAudio,
+                    onTestAudio = onTestAzan,
+                    onStopAudio = onStopAzan,
+                    onClearAudio = onClearAzanAudio,
+                    onRequestExactAlarm = onRequestExactAlarm
+                )
+            }
+        }
 
-        item { SectionLabel("Tentang aplikasi") }
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(Modifier.padding(18.dp)) {
-                    Text("NudroidLabs", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text("Waktu Solat & Kiblat", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Sumber jadual: e-Solat JAKIM", fontSize = 13.sp)
-                    Text("Lokasi hanya digunakan apabila diminta.", fontSize = 13.sp)
-                    Text("Kompas hanya aktif ketika halaman Kiblat dibuka.", fontSize = 13.sp)
-                    Text("Tiada analytics, iklan atau tracker.", fontSize = 13.sp)
+            SettingsSectionHeader(
+                title = "Tentang aplikasi",
+                summary = "NudroidLabs · e-Solat JAKIM",
+                expanded = expandedSection == "about",
+                onClick = { toggle("about") }
+            )
+        }
+        if (expandedSection == "about") {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        Text(
+                            "NudroidLabs",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Waktu Solat & Kiblat",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text("Sumber jadual: e-Solat JAKIM", fontSize = 13.sp)
+                        Text("Lokasi hanya digunakan apabila diminta.", fontSize = 13.sp)
+                        Text("Kompas hanya aktif ketika halaman Kiblat dibuka.", fontSize = 13.sp)
+                        Text("Tiada analytics, iklan atau tracker.", fontSize = 13.sp)
+                    }
                 }
             }
         }
@@ -183,13 +255,39 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold
-    )
+private fun SettingsSectionHeader(
+    title: String,
+    summary: String,
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold)
+                Text(
+                    summary,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                    fontSize = 12.sp,
+                    maxLines = 1
+                )
+            }
+            Text(
+                if (expanded) "▲" else "▼",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
 }
 
 @Composable
