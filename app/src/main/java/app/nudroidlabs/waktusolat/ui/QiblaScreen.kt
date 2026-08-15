@@ -2,6 +2,8 @@ package app.nudroidlabs.waktusolat.ui
 
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,9 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -184,9 +184,12 @@ private fun QiblaCompassCard(
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-    val hapticFeedback = LocalHapticFeedback.current
+    val context = LocalContext.current
     val relative = trueHeading?.let { QiblaCalculator.relativeDegrees(qiblaBearing, it.toDouble()) }
     val alignmentGate = remember(qiblaBearing) { QiblaAlignmentGate() }
+    val vibrator = remember(context) {
+        runCatching { context.getSystemService(Vibrator::class.java) }.getOrNull()
+    }
     val toneGenerator = remember {
         runCatching {
             ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70)
@@ -201,7 +204,16 @@ private fun QiblaCompassCard(
 
     LaunchedEffect(relative) {
         if (alignmentGate.shouldNotify(relative)) {
-            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (vibrator?.hasVibrator() == true) {
+                runCatching {
+                    vibrator.vibrate(
+                        VibrationEffect.createOneShot(
+                            90L,
+                            VibrationEffect.DEFAULT_AMPLITUDE
+                        )
+                    )
+                }
+            }
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 260)
         }
     }

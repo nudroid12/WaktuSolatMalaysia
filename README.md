@@ -4,9 +4,9 @@ Developer: NudroidLabs
 
 Application ID: `app.nudroidlabs.waktusolat`
 
-Current milestone: M8.2
+Current milestone: M8.3
 
-Version: `0.8.2`
+Version: `0.8.3`
 
 ## Current scope
 
@@ -74,3 +74,10 @@ M8 is committed only after unit tests, debug and release compilation, debug and 
 - Tetapan kini menggunakan seksyen yang boleh dikembangkan dan dicollapse.
 - Jika Location dimatikan, app cuba dialog sistem Android untuk menghidupkannya tanpa meninggalkan app.
 - Peranti tanpa resolution dialog masih mempunyai fallback ke tetapan Location.
+
+## M8.3 fixes
+
+- Restores the spacious scrollable Home layout from the earlier M8.2 design.
+- Keeps Dhuha spelling, 12/24-hour format, GPS shortcut and all M8.2 Final settings.
+- Qibla alignment now uses Android Vibrator and VibrationEffect instead of Compose haptic feedback.
+- Qibla sound and the anti-jitter alignment latch remain enabled.
