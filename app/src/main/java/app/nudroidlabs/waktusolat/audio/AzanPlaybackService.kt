@@ -120,6 +120,8 @@ class AzanPlaybackService : Service() {
                 setAudioAttributes(attributes)
                 setDataSource(this@AzanPlaybackService, uri)
                 setOnPreparedListener {
+                    val gain = AzanPreferences.volumePercent(this@AzanPlaybackService) / 100f
+                    it.setVolume(gain, gain)
                     it.start()
                     handler.removeCallbacks(stopSafety)
                     handler.postDelayed(stopSafety, MAX_PLAYBACK_MS)

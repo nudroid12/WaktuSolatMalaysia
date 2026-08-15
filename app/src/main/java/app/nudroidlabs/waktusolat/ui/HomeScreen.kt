@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -20,7 +21,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,72 +96,6 @@ fun HomeScreen(
                     now.format(dateFormatter),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
                     fontSize = 13.sp
-                )
-            }
-        }
-
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(onClick = onChooseZone)
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Text(
-                            "${zone.state} · $zoneCode",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(3.dp))
-                        Text(zone.area, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "Tukar",
-                            modifier = Modifier.clickable(onClick = onChooseZone),
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        IconButton(
-                            onClick = onDetectLocation,
-                            enabled = !detectingLocation
-                        ) {
-                            if (detectingLocation) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.padding(10.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_location_target),
-                                    contentDescription = "Kesan lokasi automatik",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            homeLocationMessage?.takeIf(String::isNotBlank)?.let { message ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    message,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
-                    fontSize = 12.sp
                 )
             }
         }
@@ -256,6 +190,83 @@ fun HomeScreen(
             }
         }
 
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onChooseZone)
+                            .padding(vertical = 2.dp)
+                    ) {
+                        Text(
+                            "${zone.state} · $zoneCode",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            zone.area,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Tukar",
+                            modifier = Modifier
+                                .clickable(onClick = onChooseZone)
+                                .padding(horizontal = 6.dp, vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = onDetectLocation,
+                            enabled = !detectingLocation,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            if (detectingLocation) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_location_target),
+                                    contentDescription = "Kesan lokasi automatik",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            homeLocationMessage?.takeIf(String::isNotBlank)?.let { message ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
         if (data != null) {
             item {
                 DataStatusCard(
@@ -295,27 +306,69 @@ private fun DataStatusCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(18.dp)) {
-            Text("Status data", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-            Text(status, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Status data",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        status,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                IconButton(
+                    onClick = onRefresh,
+                    enabled = !loading,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_refresh),
+                            contentDescription = "Kemas kini data",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(21.dp)
+                        )
+                    }
+                }
+            }
+
             if (cacheSavedAt > 0L) {
                 val saved = LocalDateTime.ofInstant(Instant.ofEpochMilli(cacheSavedAt), malaysiaZone)
                 Text(
-                    "Cache terakhir ${PrayerTimeDisplayFormatter.formatShortDateTime(saved, timeFormatMode)}",
-                    fontSize = 12.sp
+                    "Cache ${PrayerTimeDisplayFormatter.formatShortDateTime(saved, timeFormatMode)}",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
                 )
             }
             if (serverTime.isNotBlank()) {
-                Text("Masa pelayan JAKIM: $serverTime", fontSize = 12.sp)
+                Text(
+                    "Pelayan JAKIM $serverTime",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f)
+                )
             }
             error?.let {
-                Spacer(Modifier.height(6.dp))
-                Text("Kemas kini gagal: $it", fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = onRefresh, enabled = !loading) {
-                Text(if (loading) "Mengemas kini..." else "Kemas kini sekarang")
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "Kemas kini gagal: $it",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

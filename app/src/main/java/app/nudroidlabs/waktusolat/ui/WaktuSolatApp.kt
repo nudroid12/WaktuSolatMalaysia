@@ -184,6 +184,9 @@ private fun PrayerAppShell(
     var azanEnabled by remember { mutableStateOf(AzanPreferences.enabled(appContext)) }
     var azanSource by remember { mutableStateOf(AzanPreferences.source(appContext)) }
     var azanUri by remember { mutableStateOf(AzanPreferences.audioUri(appContext)) }
+    var azanVolumePercent by remember {
+        mutableStateOf(AzanPreferences.volumePercent(appContext))
+    }
     var azanEnabledPrayers by remember {
         mutableStateOf(
             PrayerAlarmScheduler.prayerNames.associateWith {
@@ -582,6 +585,7 @@ private fun PrayerAppShell(
                 azanEnabled = azanEnabled,
                 azanSource = azanSource,
                 azanAudioName = audioName,
+                azanVolumePercent = azanVolumePercent,
                 azanEnabledPrayers = azanEnabledPrayers,
                 onChooseZone = { showZones = true },
                 onThemeModeChange = onAppearanceModeChange,
@@ -639,6 +643,12 @@ private fun PrayerAppShell(
                     AzanPlaybackService.stop(appContext)
                     AzanPreferences.setSource(appContext, source)
                     azanSource = source
+                    settingsRevision++
+                },
+                onAzanVolumeChange = { percent ->
+                    val safePercent = percent.coerceIn(0, 100)
+                    AzanPreferences.setVolumePercent(appContext, safePercent)
+                    azanVolumePercent = safePercent
                     settingsRevision++
                 },
                 onAzanPrayerChange = { prayer, enabled ->

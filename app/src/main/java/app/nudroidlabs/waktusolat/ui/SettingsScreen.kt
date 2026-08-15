@@ -20,6 +20,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +60,7 @@ fun SettingsScreen(
     azanEnabled: Boolean,
     azanSource: AzanAudioSource,
     azanAudioName: String?,
+    azanVolumePercent: Int,
     azanEnabledPrayers: Map<String, Boolean>,
     onChooseZone: () -> Unit,
     onThemeModeChange: (AppearanceMode) -> Unit,
@@ -75,6 +77,7 @@ fun SettingsScreen(
     onPickAzanAudio: () -> Unit,
     onAzanEnabledChange: (Boolean) -> Unit,
     onAzanSourceChange: (AzanAudioSource) -> Unit,
+    onAzanVolumeChange: (Int) -> Unit,
     onAzanPrayerChange: (String, Boolean) -> Unit,
     onTestAzan: (String, AzanAudioSource) -> Unit,
     onStopAzan: () -> Unit,
@@ -206,10 +209,12 @@ fun SettingsScreen(
                     enabled = azanEnabled,
                     source = azanSource,
                     audioName = azanAudioName,
+                    volumePercent = azanVolumePercent,
                     prayerEnabled = azanEnabledPrayers,
                     hasExactAlarmAccess = hasExactAlarmAccess,
                     onEnabledChange = onAzanEnabledChange,
                     onSourceChange = onAzanSourceChange,
+                    onVolumeChange = onAzanVolumeChange,
                     onPrayerChange = onAzanPrayerChange,
                     onPickAudio = onPickAzanAudio,
                     onTestAudio = onTestAzan,
@@ -508,10 +513,12 @@ private fun AzanSettingsCard(
     enabled: Boolean,
     source: AzanAudioSource,
     audioName: String?,
+    volumePercent: Int,
     prayerEnabled: Map<String, Boolean>,
     hasExactAlarmAccess: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onSourceChange: (AzanAudioSource) -> Unit,
+    onVolumeChange: (Int) -> Unit,
     onPrayerChange: (String, Boolean) -> Unit,
     onPickAudio: () -> Unit,
     onTestAudio: (String, AzanAudioSource) -> Unit,
@@ -578,6 +585,32 @@ private fun AzanSettingsCard(
                     )
                 }
             }
+
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Volume azan", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${volumePercent.coerceIn(0, 100)}%",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Slider(
+                value = volumePercent.coerceIn(0, 100).toFloat(),
+                onValueChange = { value ->
+                    onVolumeChange(((value / 10f).toInt() * 10).coerceIn(0, 100))
+                },
+                valueRange = 0f..100f,
+                steps = 9
+            )
+            Text(
+                "Mengawal azan sahaja dan tidak mengubah volume sistem telefon.",
+                fontSize = 11.sp
+            )
 
             Spacer(Modifier.height(10.dp))
             if (source == AzanAudioSource.BUILT_IN) {

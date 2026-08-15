@@ -90,3 +90,10 @@ M8 is committed only after unit tests, debug and release compilation, debug and 
 - Azan source can be switched between built-in audio and a custom file.
 - Built-in audio is fetched by the build workflow from an Internet Archive item marked Public Domain Mark 1.0.
 - Playback continues to use an alarm-class audio foreground service and exact alarm access.
+
+## M8.4 v3
+
+- Adds an azan-only volume slider from 0 to 100 percent without changing system volume.
+- Moves the compact Location/Zone card below today's prayer times.
+- Keeps manual zone selection and one-tap GPS in the compact location card.
+- Compacts the data status card and replaces the large refresh button with a refresh icon.

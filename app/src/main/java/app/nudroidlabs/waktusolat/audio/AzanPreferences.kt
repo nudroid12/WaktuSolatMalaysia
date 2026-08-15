@@ -51,6 +51,16 @@ object AzanPreferences {
         }
     }
 
+    fun volumePercent(context: Context): Int =
+        prefs(context).getInt(KEY_VOLUME_PERCENT, DEFAULT_VOLUME_PERCENT)
+            .coerceIn(0, 100)
+
+    fun setVolumePercent(context: Context, percent: Int) {
+        prefs(context).edit {
+            putInt(KEY_VOLUME_PERCENT, percent.coerceIn(0, 100))
+        }
+    }
+
     fun hasPlayableAudio(context: Context): Boolean =
         when (source(context)) {
             AzanAudioSource.BUILT_IN -> true
@@ -83,5 +93,7 @@ object AzanPreferences {
     private const val KEY_ENABLED = "enabled"
     private const val KEY_SOURCE = "audio_source"
     private const val KEY_AUDIO_URI = "audio_uri"
+    private const val KEY_VOLUME_PERCENT = "volume_percent"
     private const val KEY_PRAYER_PREFIX = "prayer_"
+    private const val DEFAULT_VOLUME_PERCENT = 100
 }
