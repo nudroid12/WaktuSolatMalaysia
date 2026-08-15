@@ -1,4 +1,4 @@
-# Waktu Solat Malaysia
+# Waktu Solat & Kiblat
 
 Developer: NudroidLabs
 

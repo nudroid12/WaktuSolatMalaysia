@@ -17,6 +17,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -27,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -34,7 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nudroidlabs.waktusolat.data.JakimZones
 import app.nudroidlabs.waktusolat.data.PrayerDataOrigin
+import app.nudroidlabs.waktusolat.R
 import app.nudroidlabs.waktusolat.data.PrayerResponse
+import app.nudroidlabs.waktusolat.data.PrayerTimeDisplayFormatter
+import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import app.nudroidlabs.waktusolat.data.PrayerTimeEngine
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -52,7 +58,11 @@ fun HomeScreen(
     cacheSavedAt: Long,
     loading: Boolean,
     error: String?,
+    timeFormatMode: TimeFormatMode,
+    detectingLocation: Boolean,
+    homeLocationMessage: String?,
     onChooseZone: () -> Unit,
+    onDetectLocation: () -> Unit,
     onRefresh: () -> Unit
 ) {
     val malaysiaZone = remember { ZoneId.of("Asia/Kuala_Lumpur") }
@@ -81,7 +91,7 @@ fun HomeScreen(
     ) {
         item {
             Column {
-                Text("Waktu Solat Malaysia", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text("Waktu Solat & Kiblat", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Text(
                     now.format(dateFormatter),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
@@ -92,18 +102,21 @@ fun HomeScreen(
 
         item {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onChooseZone),
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 color = MaterialTheme.colorScheme.surface
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onChooseZone)
+                            .padding(vertical = 4.dp)
+                    ) {
                         Text(
                             "${zone.state} · $zoneCode",
                             color = MaterialTheme.colorScheme.primary,
@@ -113,8 +126,43 @@ fun HomeScreen(
                         Spacer(Modifier.height(3.dp))
                         Text(zone.area, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text("Tukar", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Tukar",
+                            modifier = Modifier.clickable(onClick = onChooseZone),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        IconButton(
+                            onClick = onDetectLocation,
+                            enabled = !detectingLocation
+                        ) {
+                            if (detectingLocation) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.padding(10.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_location_target),
+                                    contentDescription = "Kesan lokasi automatik",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
+            }
+
+            homeLocationMessage?.takeIf(String::isNotBlank)?.let { message ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                    fontSize = 12.sp
+                )
             }
         }
 
@@ -141,7 +189,14 @@ fun HomeScreen(
                             verticalAlignment = Alignment.Bottom
                         ) {
                             Text(upcoming.name, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-                            Text(upcoming.time, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                PrayerTimeDisplayFormatter.formatLocalTime(
+                                    upcoming.target.toLocalTime(),
+                                    timeFormatMode
+                                ),
+                                fontSize = 25.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                         Spacer(Modifier.height(10.dp))
                         Surface(
@@ -195,7 +250,8 @@ fun HomeScreen(
                 PrayerTimesCard(
                     day = today,
                     title = "Waktu hari ini",
-                    highlightedPrayer = upcoming?.name
+                    highlightedPrayer = upcoming?.name,
+                    timeFormatMode = timeFormatMode
                 )
             }
         }
@@ -209,7 +265,8 @@ fun HomeScreen(
                     loading = loading,
                     error = error,
                     onRefresh = onRefresh,
-                    malaysiaZone = malaysiaZone
+                    malaysiaZone = malaysiaZone,
+                    timeFormatMode = timeFormatMode
                 )
             }
         }
@@ -224,7 +281,8 @@ private fun DataStatusCard(
     loading: Boolean,
     error: String?,
     onRefresh: () -> Unit,
-    malaysiaZone: ZoneId
+    malaysiaZone: ZoneId,
+    timeFormatMode: TimeFormatMode
 ) {
     val status = when (origin) {
         PrayerDataOrigin.NETWORK -> "Dikemas kini daripada e-Solat JAKIM"
@@ -244,7 +302,7 @@ private fun DataStatusCard(
             if (cacheSavedAt > 0L) {
                 val saved = LocalDateTime.ofInstant(Instant.ofEpochMilli(cacheSavedAt), malaysiaZone)
                 Text(
-                    "Cache terakhir ${saved.format(DateTimeFormatter.ofPattern("dd/MM, HH:mm"))}",
+                    "Cache terakhir ${PrayerTimeDisplayFormatter.formatShortDateTime(saved, timeFormatMode)}",
                     fontSize = 12.sp
                 )
             }

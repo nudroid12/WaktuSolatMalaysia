@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nudroidlabs.waktusolat.BuildConfig
 import app.nudroidlabs.waktusolat.data.JakimZones
+import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import app.nudroidlabs.waktusolat.location.ZoneSuggestion
 import app.nudroidlabs.waktusolat.notification.PrayerAlarmScheduler
 import app.nudroidlabs.waktusolat.notification.PrayerAlertStyle
@@ -39,6 +40,7 @@ fun SettingsScreen(
     modifier: Modifier,
     zoneCode: String,
     themeMode: AppearanceMode,
+    timeFormatMode: TimeFormatMode,
     detectingLocation: Boolean,
     locationMessage: String?,
     zoneSuggestion: ZoneSuggestion?,
@@ -54,6 +56,7 @@ fun SettingsScreen(
     azanEnabledPrayers: Map<String, Boolean>,
     onChooseZone: () -> Unit,
     onThemeModeChange: (AppearanceMode) -> Unit,
+    onTimeFormatModeChange: (TimeFormatMode) -> Unit,
     onDetectLocation: () -> Unit,
     onUseSuggestion: (ZoneSuggestion) -> Unit,
     onMasterNotificationChange: (Boolean) -> Unit,
@@ -80,12 +83,18 @@ fun SettingsScreen(
         item {
             Column {
                 Text("Tetapan", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text("Waktu Solat Malaysia ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.primary)
+                Text("Waktu Solat & Kiblat ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.primary)
             }
         }
 
         item { SectionLabel("Paparan") }
         item { AppearanceCard(mode = themeMode, onModeChange = onThemeModeChange) }
+        item {
+            TimeFormatCard(
+                mode = timeFormatMode,
+                onModeChange = onTimeFormatModeChange
+            )
+        }
 
         item { SectionLabel("Lokasi dan zon") }
         item {
@@ -161,7 +170,7 @@ fun SettingsScreen(
             ) {
                 Column(Modifier.padding(18.dp)) {
                     Text("NudroidLabs", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text("Waktu Solat Malaysia", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("Waktu Solat & Kiblat", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Text("Sumber jadual: e-Solat JAKIM", fontSize = 13.sp)
                     Text("Lokasi hanya digunakan apabila diminta.", fontSize = 13.sp)
@@ -201,6 +210,39 @@ private fun AppearanceCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AppearanceMode.entries.forEach { item ->
+                    FilterChip(
+                        selected = mode == item,
+                        onClick = { onModeChange(item) },
+                        label = { Text(item.label) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeFormatCard(
+    mode: TimeFormatMode,
+    onModeChange: (TimeFormatMode) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text(
+                "Format masa",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text("Pilih paparan masa 24 jam atau 12 jam.", fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TimeFormatMode.entries.forEach { item ->
                     FilterChip(
                         selected = mode == item,
                         onClick = { onModeChange(item) },

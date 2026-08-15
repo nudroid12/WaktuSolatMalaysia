@@ -13,7 +13,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import app.nudroidlabs.waktusolat.audio.AzanPreferences
 import app.nudroidlabs.waktusolat.data.PrayerDay
+import app.nudroidlabs.waktusolat.data.PrayerTimeDisplayFormatter
 import app.nudroidlabs.waktusolat.data.PrayerTimeEngine
+import app.nudroidlabs.waktusolat.data.TimeFormatPreferences
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -50,7 +52,6 @@ object PrayerAlarmScheduler {
 
     private val malaysiaZone = ZoneId.of("Asia/Kuala_Lumpur")
     private val apiTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
-    private val displayTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
     fun createNotificationChannels(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -204,7 +205,7 @@ object PrayerAlarmScheduler {
                         nowMillis = nowMillis,
                         requestCode = entryCode,
                         prayerName = name,
-                        prayerTime = time.format(displayTimeFormatter),
+                        prayerTime = PrayerTimeDisplayFormatter.formatLocalTime(time, TimeFormatPreferences.mode(context)),
                         zoneCode = zoneCode,
                         kind = KIND_ENTRY,
                         leadMinutes = 0
@@ -236,7 +237,7 @@ object PrayerAlarmScheduler {
                             nowMillis = nowMillis,
                             requestCode = earlyCode,
                             prayerName = name,
-                            prayerTime = time.format(displayTimeFormatter),
+                            prayerTime = PrayerTimeDisplayFormatter.formatLocalTime(time, TimeFormatPreferences.mode(context)),
                             zoneCode = zoneCode,
                             kind = KIND_EARLY,
                             leadMinutes = earlyMinutes

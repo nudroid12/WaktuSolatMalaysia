@@ -33,7 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nudroidlabs.waktusolat.data.JakimZones
 import app.nudroidlabs.waktusolat.data.PrayerDay
-import app.nudroidlabs.waktusolat.data.PrayerTimeEngine
+import app.nudroidlabs.waktusolat.data.PrayerTimeDisplayFormatter
+import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import app.nudroidlabs.waktusolat.location.ZoneSuggestion
 
 @Composable
@@ -41,7 +42,8 @@ fun PrayerTimesCard(
     day: PrayerDay,
     title: String = "Hari ini",
     compact: Boolean = false,
-    highlightedPrayer: String? = null
+    highlightedPrayer: String? = null,
+    timeFormatMode: TimeFormatMode = TimeFormatMode.HOUR_24
 ) {
     val rows = if (compact) {
         listOf(
@@ -88,7 +90,7 @@ fun PrayerTimesCard(
                         PrayerTimeCell(
                             modifier = Modifier.weight(1f),
                             name = name,
-                            time = PrayerTimeEngine.displayTime(raw),
+                            time = PrayerTimeDisplayFormatter.formatApiTime(raw, timeFormatMode),
                             highlighted = name == highlightedPrayer
                         )
                     }

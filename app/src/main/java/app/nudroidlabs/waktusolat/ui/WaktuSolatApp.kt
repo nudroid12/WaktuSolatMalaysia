@@ -37,6 +37,8 @@ import app.nudroidlabs.waktusolat.audio.AzanPreferences
 import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
 import app.nudroidlabs.waktusolat.data.PrayerDataOrigin
 import app.nudroidlabs.waktusolat.data.PrayerResponse
+import app.nudroidlabs.waktusolat.data.TimeFormatMode
+import app.nudroidlabs.waktusolat.data.TimeFormatPreferences
 import app.nudroidlabs.waktusolat.location.LocationZoneDetector
 import app.nudroidlabs.waktusolat.location.SavedLocation
 import app.nudroidlabs.waktusolat.location.ZoneSuggestion
@@ -75,6 +77,7 @@ enum class AppTab(val label: String, val shortLabel: String) {
 fun WaktuSolatApp(resumeToken: Int = 0) {
     val context = LocalContext.current.applicationContext
     var appearanceMode by remember { mutableStateOf(AppearancePreferences.mode(context)) }
+    var timeFormatMode by remember { mutableStateOf(TimeFormatPreferences.mode(context)) }
     val systemDark = isSystemInDarkTheme()
     val useDark = when (appearanceMode) {
         AppearanceMode.SYSTEM -> systemDark
@@ -87,9 +90,14 @@ fun WaktuSolatApp(resumeToken: Int = 0) {
             PrayerAppShell(
                 appearanceMode = appearanceMode,
                 resumeToken = resumeToken,
+                timeFormatMode = timeFormatMode,
                 onAppearanceModeChange = { mode ->
                     AppearancePreferences.setMode(context, mode)
                     appearanceMode = mode
+                },
+                onTimeFormatModeChange = { mode ->
+                    TimeFormatPreferences.setMode(context, mode)
+                    timeFormatMode = mode
                 }
             )
         }
@@ -100,7 +108,9 @@ fun WaktuSolatApp(resumeToken: Int = 0) {
 private fun PrayerAppShell(
     appearanceMode: AppearanceMode,
     resumeToken: Int,
-    onAppearanceModeChange: (AppearanceMode) -> Unit
+    timeFormatMode: TimeFormatMode,
+    onAppearanceModeChange: (AppearanceMode) -> Unit,
+    onTimeFormatModeChange: (TimeFormatMode) -> Unit
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -123,6 +133,8 @@ private fun PrayerAppShell(
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var zoneSuggestion by remember { mutableStateOf<ZoneSuggestion?>(null) }
     var locationRevision by remember { mutableLongStateOf(0L) }
+    var autoApplyDetectedZone by remember { mutableStateOf(false) }
+    var homeLocationMessage by remember { mutableStateOf<String?>(null) }
 
     var notificationsEnabled by remember {
         mutableStateOf(PrayerAlarmScheduler.notificationsEnabled(appContext))
@@ -174,7 +186,10 @@ private fun PrayerAppShell(
         if (granted) {
             detectionNonce++
         } else {
-            locationMessage = "Kebenaran lokasi diperlukan untuk mengesan zon dan kiblat."
+            val message = "Kebenaran lokasi diperlukan untuk mengesan zon dan kiblat."
+            locationMessage = message
+            if (autoApplyDetectedZone) homeLocationMessage = message
+            autoApplyDetectedZone = false
         }
     }
 
@@ -208,9 +223,11 @@ private fun PrayerAppShell(
         }
     }
 
-    fun requestLocationDetection() {
+    fun requestLocationDetection(autoApplyZone: Boolean = false) {
+        autoApplyDetectedZone = autoApplyZone
         locationMessage = null
         zoneSuggestion = null
+        if (autoApplyZone) homeLocationMessage = null
 
         val fineGranted = ContextCompat.checkSelfPermission(
             context,
@@ -292,17 +309,35 @@ private fun PrayerAppShell(
         zoneSuggestion = null
         detector.detect().fold(
             onSuccess = { suggestion ->
-                zoneSuggestion = suggestion
-                locationMessage = if (suggestion.zone.code == zoneCode) {
-                    "Lokasi sepadan dengan zon semasa ${suggestion.zone.code}."
+                if (autoApplyDetectedZone) {
+                    val detectedCode = suggestion.zone.code
+                    homeLocationMessage = if (detectedCode == zoneCode) {
+                        "Lokasi dikesan · zon $detectedCode sudah digunakan."
+                    } else {
+                        "Lokasi dikesan · zon $detectedCode digunakan."
+                    }
+                    locationMessage = homeLocationMessage
+                    if (detectedCode != zoneCode) {
+                        setZone(detectedCode)
+                    } else {
+                        zoneSuggestion = suggestion
+                    }
                 } else {
-                    "Cadangan zon ditemui. Sahkan sebelum menukarnya."
+                    zoneSuggestion = suggestion
+                    locationMessage = if (suggestion.zone.code == zoneCode) {
+                        "Lokasi sepadan dengan zon semasa ${suggestion.zone.code}."
+                    } else {
+                        "Cadangan zon ditemui. Sahkan sebelum menukarnya."
+                    }
                 }
             },
             onFailure = {
-                locationMessage = it.message ?: "Lokasi tidak dapat dikesan."
+                val message = it.message ?: "Lokasi tidak dapat dikesan."
+                locationMessage = message
+                if (autoApplyDetectedZone) homeLocationMessage = message
             }
         )
+        autoApplyDetectedZone = false
         locationRevision++
         detectingLocation = false
     }
@@ -379,7 +414,11 @@ private fun PrayerAppShell(
                 cacheSavedAt = cacheSavedAt,
                 loading = loading,
                 error = error,
+                timeFormatMode = timeFormatMode,
+                detectingLocation = detectingLocation,
+                homeLocationMessage = homeLocationMessage,
                 onChooseZone = { showZones = true },
+                onDetectLocation = { requestLocationDetection(autoApplyZone = true) },
                 onRefresh = { reloadNonce++ }
             )
 
@@ -389,6 +428,7 @@ private fun PrayerAppShell(
                 data = data,
                 loading = loading,
                 error = error,
+                timeFormatMode = timeFormatMode,
                 onRefresh = { reloadNonce++ }
             )
 
@@ -398,13 +438,15 @@ private fun PrayerAppShell(
                 jakimBearing = data?.bearing,
                 detectingLocation = detectingLocation,
                 locationMessage = locationMessage,
-                onDetectLocation = ::requestLocationDetection
+                timeFormatMode = timeFormatMode,
+                onDetectLocation = { requestLocationDetection() }
             )
 
             AppTab.SETTINGS -> SettingsScreen(
                 modifier = Modifier.padding(inner),
                 zoneCode = zoneCode,
                 themeMode = appearanceMode,
+                timeFormatMode = timeFormatMode,
                 detectingLocation = detectingLocation,
                 locationMessage = locationMessage,
                 zoneSuggestion = zoneSuggestion,
@@ -420,7 +462,11 @@ private fun PrayerAppShell(
                 azanEnabledPrayers = azanEnabledPrayers,
                 onChooseZone = { showZones = true },
                 onThemeModeChange = onAppearanceModeChange,
-                onDetectLocation = ::requestLocationDetection,
+                onTimeFormatModeChange = { mode ->
+                    onTimeFormatModeChange(mode)
+                    settingsRevision++
+                },
+                onDetectLocation = { requestLocationDetection() },
                 onUseSuggestion = { setZone(it.zone.code) },
                 onMasterNotificationChange = ::setNotifications,
                 onPrayerChange = { prayer, enabled ->

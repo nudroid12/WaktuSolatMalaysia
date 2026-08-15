@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import app.nudroidlabs.waktusolat.data.JakimZones
 import app.nudroidlabs.waktusolat.data.PrayerResponse
 import app.nudroidlabs.waktusolat.data.PrayerTimeEngine
+import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -34,6 +35,7 @@ fun WeekScreen(
     data: PrayerResponse?,
     loading: Boolean,
     error: String?,
+    timeFormatMode: TimeFormatMode,
     onRefresh: () -> Unit
 ) {
     val zone = JakimZones.byCode(zoneCode)
@@ -100,7 +102,8 @@ fun WeekScreen(
                         PrayerTimesCard(
                             day = day,
                             title = if (isToday) "Hari ini · ${day.dayRaw}" else day.dayRaw.ifBlank { "Jadual" },
-                            compact = true
+                            compact = true,
+                            timeFormatMode = timeFormatMode
                         )
                     }
                 }

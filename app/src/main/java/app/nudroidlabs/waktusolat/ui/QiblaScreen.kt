@@ -31,11 +31,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nudroidlabs.waktusolat.data.PrayerTimeDisplayFormatter
+import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import app.nudroidlabs.waktusolat.location.SavedLocation
 import app.nudroidlabs.waktusolat.qibla.QiblaCalculator
 import app.nudroidlabs.waktusolat.qibla.QiblaSensor
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.sin
@@ -47,6 +47,7 @@ fun QiblaScreen(
     jakimBearing: String?,
     detectingLocation: Boolean,
     locationMessage: String?,
+    timeFormatMode: TimeFormatMode,
     onDetectLocation: () -> Unit
 ) {
     val context = LocalContext.current
@@ -141,7 +142,7 @@ fun QiblaScreen(
                         )
                         if (location.capturedAtMillis > 0L) {
                             Text(
-                                "Dikesan: ${formatLocationTime(location.capturedAtMillis)}",
+                                "Dikesan: ${PrayerTimeDisplayFormatter.formatFullMalaysiaDateTime(location.capturedAtMillis, timeFormatMode)}",
                                 fontSize = 12.sp
                             )
                         }
@@ -276,6 +277,3 @@ private fun QiblaCompassCard(
         }
     }
 }
-
-private fun formatLocationTime(millis: Long): String =
-    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("ms-MY")).format(Date(millis))
