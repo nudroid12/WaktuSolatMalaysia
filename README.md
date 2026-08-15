@@ -120,3 +120,12 @@ M9 freezes product features and prepares the app for release validation.
 - GitHub Actions builds debug APK, release APK, and release AAB, audits
   permissions/background behavior, records checksums and sizes, and preserves
   detailed diagnostics on failure.
+
+## M9.1 Navigation & Exit Polish
+
+- The compact location card is now the first Home card, above the next-prayer card.
+- Android Back from 7 Hari, Kiblat, or Tetapan returns to Utama.
+- Android Back from Utama opens an exit confirmation dialog.
+- Confirming exit stops active azan/test playback and removes the app task.
+- Scheduled prayer alarms, notifications, and periodic refresh remain intact after exit.
+- Version 0.9.1, versionCode 16.

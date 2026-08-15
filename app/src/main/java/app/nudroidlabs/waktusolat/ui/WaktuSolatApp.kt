@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -144,6 +145,7 @@ private fun PrayerAppShell(
     }
 
     var tab by remember { mutableStateOf(AppTab.HOME) }
+    var showExitConfirmation by remember { mutableStateOf(false) }
     var zoneCode by remember { mutableStateOf(repository.savedZone()) }
     var data by remember { mutableStateOf<PrayerResponse?>(null) }
     var dataOrigin by remember { mutableStateOf<PrayerDataOrigin?>(null) }
@@ -515,6 +517,14 @@ private fun PrayerAppShell(
         azanUri?.let { queryDisplayName(context, it.toUri()) ?: "Fail audio dipilih" }
     }
 
+    BackHandler {
+        when {
+            showZones -> showZones = false
+            tab != AppTab.HOME -> tab = AppTab.HOME
+            else -> showExitConfirmation = true
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -693,6 +703,35 @@ private fun PrayerAppShell(
             onSelect = {
                 showZones = false
                 setZone(it)
+            }
+        )
+    }
+
+    if (showExitConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmation = false },
+            title = { Text("Keluar Waktu Solat & Kiblat?") },
+            text = {
+                Text(
+                    "Aplikasi akan ditutup dan audio yang sedang dimainkan akan dihentikan. " +
+                        "Jadual azan dan notifikasi waktu solat akan kekal aktif."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitConfirmation = false
+                        AzanPlaybackService.stop(appContext)
+                        (context as? Activity)?.finishAndRemoveTask()
+                    }
+                ) {
+                    Text("Keluar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitConfirmation = false }) {
+                    Text("Batal")
+                }
             }
         )
     }

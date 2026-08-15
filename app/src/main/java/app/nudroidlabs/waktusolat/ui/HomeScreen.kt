@@ -100,6 +100,83 @@ fun HomeScreen(
             }
         }
 
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onChooseZone)
+                            .padding(vertical = 2.dp)
+                    ) {
+                        Text(
+                            "${zone.state} · $zoneCode",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            zone.area,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Tukar",
+                            modifier = Modifier
+                                .clickable(onClick = onChooseZone)
+                                .padding(horizontal = 6.dp, vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = onDetectLocation,
+                            enabled = !detectingLocation,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            if (detectingLocation) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_location_target),
+                                    contentDescription = "Kesan lokasi automatik",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            homeLocationMessage?.takeIf(String::isNotBlank)?.let { message ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
         if (upcoming != null) {
             item {
                 Card(
@@ -176,83 +253,6 @@ fun HomeScreen(
                         Button(onClick = onRefresh) { Text("Cuba lagi") }
                     }
                 }
-            }
-        }
-
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(onClick = onChooseZone)
-                            .padding(vertical = 2.dp)
-                    ) {
-                        Text(
-                            "${zone.state} · $zoneCode",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            zone.area,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Tukar",
-                            modifier = Modifier
-                                .clickable(onClick = onChooseZone)
-                                .padding(horizontal = 6.dp, vertical = 8.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        IconButton(
-                            onClick = onDetectLocation,
-                            enabled = !detectingLocation,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            if (detectingLocation) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_location_target),
-                                    contentDescription = "Kesan lokasi automatik",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(21.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            homeLocationMessage?.takeIf(String::isNotBlank)?.let { message ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    message,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
-                    fontSize = 11.sp
-                )
             }
         }
 
