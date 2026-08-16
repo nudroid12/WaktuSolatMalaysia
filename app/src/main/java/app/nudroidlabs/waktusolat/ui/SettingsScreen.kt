@@ -62,6 +62,8 @@ fun SettingsScreen(
     azanAudioName: String?,
     azanVolumePercent: Int,
     azanEnabledPrayers: Map<String, Boolean>,
+    updateChecking: Boolean,
+    updateStatus: String?,
     onChooseZone: () -> Unit,
     onThemeModeChange: (AppearanceMode) -> Unit,
     onTimeFormatModeChange: (TimeFormatMode) -> Unit,
@@ -81,7 +83,8 @@ fun SettingsScreen(
     onAzanPrayerChange: (String, Boolean) -> Unit,
     onTestAzan: (String, AzanAudioSource) -> Unit,
     onStopAzan: () -> Unit,
-    onClearAzanAudio: () -> Unit
+    onClearAzanAudio: () -> Unit,
+    onCheckUpdate: () -> Unit
 ) {
     val zone = JakimZones.byCode(zoneCode)
     var expandedSection by rememberSaveable { mutableStateOf<String?>(null) }
@@ -257,6 +260,21 @@ fun SettingsScreen(
                         Text("Lokasi hanya digunakan apabila diminta.", fontSize = 13.sp)
                         Text("Kompas hanya aktif ketika halaman Kiblat dibuka.", fontSize = 13.sp)
                         Text("Tiada analytics, iklan atau tracker.", fontSize = 13.sp)
+                        Spacer(Modifier.height(14.dp))
+                        Button(
+                            onClick = onCheckUpdate,
+                            enabled = !updateChecking
+                        ) {
+                            Text(if (updateChecking) "Menyemak..." else "Semak kemas kini")
+                        }
+                        updateStatus?.takeIf(String::isNotBlank)?.let { status ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                status,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                            )
+                        }
                     }
                 }
             }

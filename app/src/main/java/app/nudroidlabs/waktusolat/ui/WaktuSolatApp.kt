@@ -37,6 +37,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import app.nudroidlabs.waktusolat.BuildConfig
+import app.nudroidlabs.waktusolat.update.AppUpdateManager
+import app.nudroidlabs.waktusolat.update.UpdateInfo
+import app.nudroidlabs.waktusolat.update.UpdatePreferences
+import java.io.File
 import app.nudroidlabs.waktusolat.audio.AzanAudioSource
 import app.nudroidlabs.waktusolat.audio.AzanPlaybackService
 import app.nudroidlabs.waktusolat.audio.AzanPreferences
@@ -199,6 +204,41 @@ private fun PrayerAppShell(
     var settingsRevision by remember { mutableLongStateOf(0L) }
     var scheduleMessage by remember { mutableStateOf<String?>(null) }
 
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
+    var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var updateDownloading by remember { mutableStateOf(false) }
+    var manualUpdateCheckNonce by remember { mutableLongStateOf(0L) }
+    var downloadRequest by remember { mutableStateOf<UpdateInfo?>(null) }
+    var pendingInstallFile by remember { mutableStateOf<File?>(null) }
+
+    suspend fun performUpdateCheck(manual: Boolean) {
+        if (updateChecking || updateDownloading) return
+        updateChecking = true
+        if (manual) updateStatus = "Menyemak kemas kini..."
+
+        AppUpdateManager.checkForUpdate(appContext).fold(
+            onSuccess = { info ->
+                if (info == null) {
+                    if (manual) {
+                        updateStatus = "Versi ${BuildConfig.VERSION_NAME} ialah yang terkini."
+                    }
+                } else {
+                    availableUpdate = info
+                    updateStatus = "Versi ${info.versionName} tersedia."
+                    showUpdateDialog = true
+                }
+            },
+            onFailure = { failure ->
+                if (manual) {
+                    updateStatus = failure.message ?: "Semakan kemas kini gagal."
+                }
+            }
+        )
+        updateChecking = false
+    }
+
     fun setZone(code: String) {
         PrayerAlarmScheduler.cancelAll(appContext)
         zoneCode = code
@@ -209,6 +249,21 @@ private fun PrayerAppShell(
         error = null
         loading = true
         zoneSuggestion = null
+    }
+
+    val unknownSourcesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val apk = pendingInstallFile
+        if (apk != null && AppUpdateManager.canRequestPackageInstalls(appContext)) {
+            runCatching {
+                context.startActivity(AppUpdateManager.installIntent(context, apk))
+            }.onFailure {
+                updateStatus = "Installer Android tidak dapat dibuka."
+            }
+        } else if (apk != null) {
+            updateStatus = "Benarkan pemasangan aplikasi daripada sumber ini untuk meneruskan."
+        }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -503,6 +558,57 @@ private fun PrayerAppShell(
         }
     }
 
+    LaunchedEffect(resumeToken) {
+        if (UpdatePreferences.shouldAutoCheck(appContext) && !updateChecking && !updateDownloading) {
+            UpdatePreferences.markAutoCheckAttempt(appContext)
+            performUpdateCheck(manual = false)
+        }
+    }
+
+    LaunchedEffect(manualUpdateCheckNonce) {
+        if (manualUpdateCheckNonce > 0L) {
+            performUpdateCheck(manual = true)
+        }
+    }
+
+    LaunchedEffect(downloadRequest?.versionCode) {
+        val info = downloadRequest ?: return@LaunchedEffect
+        updateDownloading = true
+        updateStatus = "Memuat turun dan mengesahkan versi ${info.versionName}..."
+
+        AppUpdateManager.downloadAndVerify(appContext, info).fold(
+            onSuccess = { apk ->
+                pendingInstallFile = apk
+                updateDownloading = false
+                downloadRequest = null
+                showUpdateDialog = false
+                updateStatus = "APK disahkan. Membuka installer Android..."
+
+                if (AppUpdateManager.canRequestPackageInstalls(appContext)) {
+                    runCatching {
+                        context.startActivity(AppUpdateManager.installIntent(context, apk))
+                    }.onFailure {
+                        updateStatus = "Installer Android tidak dapat dibuka."
+                    }
+                } else {
+                    updateStatus = "Benarkan pemasangan aplikasi daripada sumber ini untuk meneruskan."
+                    runCatching {
+                        unknownSourcesLauncher.launch(
+                            AppUpdateManager.unknownSourcesSettingsIntent(context)
+                        )
+                    }.onFailure {
+                        updateStatus = "Tetapan pemasangan aplikasi tidak dapat dibuka."
+                    }
+                }
+            },
+            onFailure = { failure ->
+                updateDownloading = false
+                downloadRequest = null
+                updateStatus = failure.message ?: "Muat turun kemas kini gagal."
+            }
+        )
+    }
+
     LaunchedEffect(Unit) {
         PrayerAlarmScheduler.createNotificationChannels(appContext)
         if (PrayerAlarmScheduler.scheduleNeeded(appContext)) {
@@ -519,6 +625,7 @@ private fun PrayerAppShell(
 
     BackHandler {
         when {
+            showUpdateDialog && !updateDownloading -> showUpdateDialog = false
             showZones -> showZones = false
             tab != AppTab.HOME -> tab = AppTab.HOME
             else -> showExitConfirmation = true
@@ -591,6 +698,8 @@ private fun PrayerAppShell(
                 azanAudioName = audioName,
                 azanVolumePercent = azanVolumePercent,
                 azanEnabledPrayers = azanEnabledPrayers,
+                updateChecking = updateChecking,
+                updateStatus = updateStatus,
                 onChooseZone = { showZones = true },
                 onThemeModeChange = onAppearanceModeChange,
                 onTimeFormatModeChange = { mode ->
@@ -685,6 +794,49 @@ private fun PrayerAppShell(
                     azanSource = AzanAudioSource.BUILT_IN
                     azanUri = null
                     settingsRevision++
+                },
+                onCheckUpdate = {
+                    manualUpdateCheckNonce++
+                }
+            )
+        }
+    }
+
+    if (showUpdateDialog) {
+        availableUpdate?.let { info ->
+            AlertDialog(
+                onDismissRequest = {
+                    if (!updateDownloading) showUpdateDialog = false
+                },
+                title = { Text("Versi baharu ${info.versionName}") },
+                text = {
+                    Text(
+                        if (updateDownloading) {
+                            "Memuat turun dan mengesahkan APK..."
+                        } else {
+                            info.releaseNotes.ifBlank {
+                                "Kemas kini baharu tersedia untuk Waktu Solat & Kiblat."
+                            }
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (!updateDownloading) downloadRequest = info
+                        },
+                        enabled = !updateDownloading
+                    ) {
+                        Text(if (updateDownloading) "Memuat turun..." else "Kemas Kini")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showUpdateDialog = false },
+                        enabled = !updateDownloading
+                    ) {
+                        Text("Nanti")
+                    }
                 }
             )
         }

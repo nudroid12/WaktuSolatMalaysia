@@ -152,3 +152,14 @@ M10 freezes the M9.2 product exactly as approved and prepares the first final re
   and release-output audits.
 - Produces final debug APK, release APK, release AAB, R8 mapping, SHA-256
   checksums, signing report, size reports, and release-readiness report.
+
+## M10.1 Self Updater
+
+- Keeps final public version at 1.0.0 / versionCode 18 before first signing.
+- Adds manual update check under Tentang aplikasi.
+- Adds lightweight auto-check at most once every 24 hours when the app is opened.
+- Uses a fixed GitHub-hosted update.json metadata URL.
+- Downloads only HTTPS GitHub Release APK URLs.
+- Verifies SHA-256, package name, versionCode, and signer certificate before install.
+- Uses Android FileProvider and the normal Android package installer UI.
+- No silent install and no always-running update background service.
