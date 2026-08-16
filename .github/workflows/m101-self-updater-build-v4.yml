@@ -1,0 +1,1694 @@
+name: M10.1 Self Updater v4
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  m101-self-updater:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Precheck baseline
+        id: precheck
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "PRECHECK" > .m9-stage
+
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/java/app/nudroidlabs/waktusolat/data/PrayerModels.kt
+          test -f app/src/main/java/app/nudroidlabs/waktusolat/data/PrayerTimeEngine.kt
+          test -f app/src/main/java/app/nudroidlabs/waktusolat/data/JakimZones.kt
+          test -f app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+
+          grep -q 'applicationId = "app.nudroidlabs.waktusolat"' app/build.gradle.kts
+          grep -Eq 'versionCode = (17|18)' app/build.gradle.kts
+          grep -q 'compileSdk = 37' app/build.gradle.kts
+          grep -q 'targetSdk = 37' app/build.gradle.kts
+
+      - name: Apply targeted M10.1 v4 updater patch
+        id: patch
+        if: steps.precheck.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          exec > >(tee patch.log) 2>&1
+          trap 'rc=$?; echo "APPLY_PATCH_FAILED rc=$rc line=$LINENO command=$BASH_COMMAND"; exit $rc' ERR
+          echo "APPLY_PATCH" > .m9-stage
+
+          if grep -q 'object AppUpdateManager'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt 2>/dev/null; then
+            if grep -q 'PackageManager.GET_SIGNATURES'               app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt 2>/dev/null; then
+              echo 'Detected source state: M10.1 v2-compatible updater already present.'
+            else
+              echo 'Detected source state: earlier M10.1 updater present.'
+            fi
+          else
+            echo 'Detected source state: M10 baseline without updater.'
+          fi
+
+          cat > /tmp/wsk-m101v3.b64 <<'WSK_M101V3_BASE64'
+          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
+          +pYDAADbBgAADgAAAAAAAAAAAAAApIHrDQAAU0VMRl9VUERBVEUubWRQSwECFAMUAAAACADUDBBd2zAY1l8AAACCAAAACwAAAAAAAAAAAAAApIGtEQAAdXBk
+          YXRlLmpzb25QSwECFAMUAAAACADUDBBddJ3sE+wDAABLCwAAFAAAAAAAAAAAAAAApIE1EgAAYXBwL2J1aWxkLmdyYWRsZS5rdHNQSwECFAMUAAAACADUDBBd
+          YL50uEcDAADYCwAAIAAAAAAAAAAAAAAApIFTFgAAYXBwL3NyYy9tYWluL0FuZHJvaWRNYW5pZmVzdC54bWxQSwECFAMUAAAACADUDBBdwd9wmIAAAAC1AAAA
+          KgAAAAAAAAAAAAAApIHYGQAAYXBwL3NyYy9tYWluL3Jlcy94bWwvdXBkYXRlX2ZpbGVfcGF0aHMueG1sUEsBAhQDFAAAAAgA1AwQXX3oIzF+DAAAxDQAAEcA
+          AAAAAAAAAAAAAKSBoBoAAGFwcC9zcmMvbWFpbi9qYXZhL2FwcC9udWRyb2lkbGFicy93YWt0dXNvbGF0L3VwZGF0ZS9BcHBVcGRhdGVNYW5hZ2VyLmt0UEsB
+          AhQDFAAAAAgA1AwQXdjYQPBPAQAAWAIAAEMAAAAAAAAAAAAAAKSBgycAAGFwcC9zcmMvbWFpbi9qYXZhL2FwcC9udWRyb2lkbGFicy93YWt0dXNvbGF0L3Vw
+          ZGF0ZS9VcGRhdGVQb2xpY3kua3RQSwECFAMUAAAACADUDBBdSBx4FX4BAAA9AwAASAAAAAAAAAAAAAAApIEzKQAAYXBwL3NyYy9tYWluL2phdmEvYXBwL251
+          ZHJvaWRsYWJzL3dha3R1c29sYXQvdXBkYXRlL1VwZGF0ZVByZWZlcmVuY2VzLmt0UEsBAhQDFAAAAAgA1AwQXT4IYvFHEgAAs3IAAEEAAAAAAAAAAAAAAKSB
+          FysAAGFwcC9zcmMvbWFpbi9qYXZhL2FwcC9udWRyb2lkbGFicy93YWt0dXNvbGF0L3VpL1NldHRpbmdzU2NyZWVuLmt0UEsBAhQDFAAAAAgA1AwQXTCoq/0T
+          GwAAypYAAEAAAAAAAAAAAAAAAKSBvT0AAGFwcC9zcmMvbWFpbi9qYXZhL2FwcC9udWRyb2lkbGFicy93YWt0dXNvbGF0L3VpL1dha3R1U29sYXRBcHAua3RQ
+          SwECFAMUAAAACADUDBBdC5yUhosBAABxBAAARwAAAAAAAAAAAAAApIEuWQAAYXBwL3NyYy90ZXN0L2phdmEvYXBwL251ZHJvaWRsYWJzL3dha3R1c29sYXQv
+          dXBkYXRlL1VwZGF0ZVBvbGljeVRlc3Qua3RQSwUGAAAAAAwADABCBAAAHlsAAAAA
+          WSK_M101V3_BASE64
+
+          base64 --decode /tmp/wsk-m101v3.b64 > /tmp/wsk-m101v3.zip
+          rm -rf /tmp/wsk-m101v3-extract
+          mkdir -p /tmp/wsk-m101v3-extract
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          archive = Path("/tmp/wsk-m101v3.zip")
+          expected = ['README.md', 'SELF_UPDATE.md', 'update.json', 'app/build.gradle.kts', 'app/src/main/AndroidManifest.xml', 'app/src/main/res/xml/update_file_paths.xml', 'app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/update/UpdatePolicy.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/update/UpdatePreferences.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt', 'app/src/test/java/app/nudroidlabs/waktusolat/update/UpdatePolicyTest.kt']
+
+          with zipfile.ZipFile(archive) as z:
+              names = z.namelist()
+              bad = [
+                  name for name in names
+                  if name.startswith("/") or ".." in Path(name).parts
+              ]
+              if bad:
+                  raise SystemExit(f"Unsafe patch paths: {bad}")
+
+              if sorted(names) != sorted(expected):
+                  raise SystemExit(
+                      "Targeted patch members differ from the exact allowlist"
+                  )
+
+              broken = z.testzip()
+              if broken:
+                  raise SystemExit(f"Corrupt patch member: {broken}")
+
+              z.extractall("/tmp/wsk-m101v3-extract")
+
+          print("Targeted updater ZIP validation: PASS")
+          PY
+
+          # Remove only updater-owned files that can be stale, then copy the exact
+          # v3 files. Unrelated app source is never replaced by this patch stage.
+          rm -rf             app/src/main/java/app/nudroidlabs/waktusolat/update             app/src/test/java/app/nudroidlabs/waktusolat/update
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+
+          root = Path("/tmp/wsk-m101v3-extract")
+          expected = ['README.md', 'SELF_UPDATE.md', 'update.json', 'app/build.gradle.kts', 'app/src/main/AndroidManifest.xml', 'app/src/main/res/xml/update_file_paths.xml', 'app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/update/UpdatePolicy.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/update/UpdatePreferences.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt', 'app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt', 'app/src/test/java/app/nudroidlabs/waktusolat/update/UpdatePolicyTest.kt']
+
+          for rel in expected:
+              source = root / rel
+              target = Path(rel)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(source, target)
+
+          print(f"Applied {len(expected)} targeted updater files.")
+          PY
+
+          test -s update.json
+          test -s SELF_UPDATE.md
+          test -s app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          test -s app/src/main/java/app/nudroidlabs/waktusolat/update/UpdatePolicy.kt
+          test -s app/src/main/java/app/nudroidlabs/waktusolat/update/UpdatePreferences.kt
+          test -s app/src/test/java/app/nudroidlabs/waktusolat/update/UpdatePolicyTest.kt
+
+          grep -q 'kotlinx-coroutines-android:1.11.0' app/build.gradle.kts
+          grep -q 'PackageManager.GET_SIGNATURES'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q '@RequiresApi(Build.VERSION_CODES.P)'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q '@RequiresApi(Build.VERSION_CODES.TIRAMISU)'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+
+          if grep -q '@TargetApi('             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt; then
+            echo 'ERROR: @TargetApi returned to updater API helpers.'
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          source = Path(
+              "app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt"
+          ).read_text(encoding="utf-8")
+
+          expected = {
+              "getArchivePackageInfoApi33":
+                  "@RequiresApi(Build.VERSION_CODES.TIRAMISU)",
+              "getArchivePackageInfoApi28":
+                  "@RequiresApi(Build.VERSION_CODES.P)",
+              "getInstalledPackageInfoApi33":
+                  "@RequiresApi(Build.VERSION_CODES.TIRAMISU)",
+              "getInstalledPackageInfoApi28":
+                  "@RequiresApi(Build.VERSION_CODES.P)",
+              "signerDigestsApi28":
+                  "@RequiresApi(Build.VERSION_CODES.P)",
+          }
+
+          for helper, annotation in expected.items():
+              pattern = re.compile(
+                  re.escape(annotation)
+                  + r'(?:\s+@Suppress\("DEPRECATION"\))?\s+private fun '
+                  + re.escape(helper)
+                  + r'\b'
+              )
+              if not pattern.search(source):
+                  raise SystemExit(
+                      f"{helper} missing propagated requirement {annotation}"
+                  )
+
+          if source.count("@RequiresApi(Build.VERSION_CODES.TIRAMISU)") != 2:
+              raise SystemExit("Expected exactly 2 API 33 RequiresApi helpers")
+          if source.count("@RequiresApi(Build.VERSION_CODES.P)") != 3:
+              raise SystemExit("Expected exactly 3 API 28 RequiresApi helpers")
+
+          print("Exact five-helper RequiresApi audit: PASS")
+          PY
+
+          if grep -q 'readNBytes('             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt; then
+            echo 'ERROR: stale readNBytes implementation survived targeted patch.'
+            exit 1
+          fi
+
+          if grep -q 'kotlinx-coroutines-android:1.10.2' app/build.gradle.kts; then
+            echo 'ERROR: stale coroutines dependency survived targeted patch.'
+            exit 1
+          fi
+
+          echo 'Targeted M10.1 v4 patch application: PASS'
+
+      - name: Ensure built-in azan audio
+        id: audio
+        if: steps.patch.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          exec > >(tee audio-fetch.log) 2>&1
+          trap 'rc=$?; echo "AUDIO_STAGE_FAILED rc=$rc line=$LINENO command=$BASH_COMMAND"; exit $rc' ERR
+          echo "AUDIO_CHECK" > .m9-stage
+          mkdir -p app/src/main/res/raw
+
+          validate_audio() {
+            python3 - "$1" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          if not path.is_file():
+              raise SystemExit(1)
+
+          data = path.read_bytes()
+          if len(data) < 500_000 or data[:4] != b"OggS":
+              raise SystemExit(1)
+          PY
+          }
+
+          ensure_audio() {
+            path="$1"
+            url="$2"
+
+            if validate_audio "$path"; then
+              echo "Existing built-in audio valid: $path"
+              return
+            fi
+
+            echo "Built-in audio missing/invalid, downloading: $path"
+            rm -f "$path"
+            curl --fail --location --retry 6 --retry-all-errors --retry-delay 3               --connect-timeout 20 --max-time 180               --output "$path" "$url"
+            validate_audio "$path"
+          }
+
+          ensure_audio             app/src/main/res/raw/azan_builtin_subuh.ogg             "https://archive.org/download/adhan.recordings.from.doha.qatar/Adhan_Doha_Qatar_01_Fajr_Adhan.ogg"
+
+          ensure_audio             app/src/main/res/raw/azan_builtin_normal.ogg             "https://archive.org/download/adhan.recordings.from.doha.qatar/Adhan_Doha_Qatar_02_Dhuhr_Adhan.ogg"
+
+          echo 'Built-in azan audio validation: PASS'
+
+      - name: Clean obsolete repository files
+        id: cleanup
+        if: steps.audio.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "REPO_CLEANUP" > .m9-stage
+
+          CURRENT_WORKFLOW="${GITHUB_WORKFLOW_REF#${GITHUB_REPOSITORY}/}"
+          CURRENT_WORKFLOW="${CURRENT_WORKFLOW%@*}"
+          echo "Current workflow: $CURRENT_WORKFLOW"
+
+          # M9.2 replaced 7 Hari with Doa. WeekScreen is now dead source.
+          git rm -f --ignore-unmatch \
+            app/src/main/java/app/nudroidlabs/waktusolat/ui/WeekScreen.kt
+
+          # Remove build/generated files only if an older commit accidentally tracked them.
+          git rm -r -f --ignore-unmatch .gradle build app/build
+          git rm -f --ignore-unmatch \
+            static-audit.log \
+            unit-test.log \
+            build.log \
+            lint.log \
+            build-diagnose.txt \
+            junit-failures.txt \
+            release-sha256.txt \
+            m9-readiness.txt \
+            unit-test-summary.txt \
+            release-permissions.txt \
+            release-badging.txt \
+            debug-badging.txt \
+            zipalign-check.txt \
+            apksigner-check.txt \
+            apk-size-top.txt \
+            aab-size-top.txt \
+            bundled-audio-size.txt \
+            release-dependencies.txt \
+            release-apk-path.txt \
+            release-aab-path.txt \
+            repo-cleanup-report.txt
+
+          # Keep the current workflow, but remove our obsolete milestone workflows.
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            [ "$path" = "$CURRENT_WORKFLOW" ] && continue
+
+            base="$(basename "$path")"
+            case "$base" in
+              m1-*.yml|m2-*.yml|m3-*.yml|m4-*.yml|m5-*.yml|m6-*.yml|m7-*.yml|m8-*.yml|m8.4-*.yml|m84-*.yml|m9-*.yml|m9.1-*.yml|m9.2-*.yml|m91-*.yml|m92-*.yml)
+                echo "Removing obsolete workflow: $path"
+                git rm -f --ignore-unmatch -- "$path"
+                ;;
+              m1-*.yaml|m2-*.yaml|m3-*.yaml|m4-*.yaml|m5-*.yaml|m6-*.yaml|m7-*.yaml|m8-*.yaml|m8.4-*.yaml|m84-*.yaml|m9-*.yaml|m9.1-*.yaml|m9.2-*.yaml|m91-*.yaml|m92-*.yaml)
+                echo "Removing obsolete workflow: $path"
+                git rm -f --ignore-unmatch -- "$path"
+                ;;
+            esac
+          done < <(git ls-files '.github/workflows/*')
+
+          # If v2 is uploaded under a new filename, remove the old M10 workflow too.
+          OLD_M10=".github/workflows/m10-final-release-build.yml"
+          if [ "$CURRENT_WORKFLOW" != "$OLD_M10" ]; then
+            git rm -f --ignore-unmatch -- "$OLD_M10"
+          fi
+
+          # Remove superseded self-updater workflows while preserving this run.
+          for old_updater in             ".github/workflows/m101-self-updater-build.yml"             ".github/workflows/m101-self-updater-build-v2.yml"; do
+            if [ "$CURRENT_WORKFLOW" != "$old_updater" ]; then
+              git rm -f --ignore-unmatch -- "$old_updater"
+            fi
+          done
+
+          # Prevent CI outputs/build folders from being committed later.
+          touch .gitignore
+          if ! grep -q '^# WSK CI generated outputs$' .gitignore; then
+            cat >> .gitignore <<'EOF'
+
+          # WSK CI generated outputs
+          .gradle/
+          build/
+          app/build/
+          *.log
+          .m9-stage
+          build-diagnose.txt
+          junit-failures.txt
+          release-sha256.txt
+          m9-readiness.txt
+          unit-test-summary.txt
+          release-permissions.txt
+          release-badging.txt
+          debug-badging.txt
+          zipalign-check.txt
+          apksigner-check.txt
+          apk-size-top.txt
+          aab-size-top.txt
+          bundled-audio-size.txt
+          release-dependencies.txt
+          release-apk-path.txt
+          release-aab-path.txt
+          repo-cleanup-report.txt
+          EOF
+          fi
+
+          {
+            echo 'WAKTU SOLAT & KIBLAT REPOSITORY CLEANUP'
+            echo '======================================='
+            echo
+            echo 'Known obsolete/generated tracked paths staged for deletion:'
+            git diff --cached --name-status --diff-filter=D || true
+            echo
+            echo 'Current workflow preserved:'
+            echo "$CURRENT_WORKFLOW"
+          } > repo-cleanup-report.txt
+
+          cat repo-cleanup-report.txt
+
+      - name: Static source audit
+        id: audit
+        if: steps.cleanup.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          exec > >(tee static-audit.log) 2>&1
+          trap 'rc=$?; echo "STATIC_AUDIT_FAILED rc=$rc line=$LINENO command=$BASH_COMMAND"; exit $rc' ERR
+          echo "STATIC_AUDIT" > .m9-stage
+
+          grep -q 'versionCode = 18' app/build.gradle.kts
+          grep -q 'versionName = "1.0.0"' app/build.gradle.kts
+          grep -q 'compileSdk = 37' app/build.gradle.kts
+          grep -q 'targetSdk = 37' app/build.gradle.kts
+          grep -q 'warningsAsErrors = true' app/build.gradle.kts
+          grep -q 'isMinifyEnabled = true' app/build.gradle.kts
+          grep -q 'isShrinkResources = true' app/build.gradle.kts
+          grep -q 'proguard-android-optimize.txt' app/build.gradle.kts
+          grep -q '"proguard-rules.pro"' app/build.gradle.kts
+          test -s app/proguard-rules.pro
+          grep -q 'PrayerRefreshWorker' app/proguard-rules.pro
+          grep -q 'AzanPlaybackService' app/proguard-rules.pro
+          grep -q 'PrayerAlarmReceiver' app/proguard-rules.pro
+          grep -q 'RescheduleReceiver' app/proguard-rules.pro
+          grep -q 'ANDROID_KEYSTORE_PATH' app/build.gradle.kts
+          grep -q 'releaseSigningConfig?.let' app/build.gradle.kts
+
+          if gradle --no-daemon -q :app:tasks --all | grep -q '^testReleaseUnitTest '; then
+            echo 'Optional release unit-test task is available.'
+          else
+            echo 'Release unit-test task is not exposed by this project. Debug unit tests remain the unit-test gate.'
+          fi
+
+
+          grep -q 'BuildConfig.VERSION_NAME' app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+          grep -q 'WaktuSolatMalaysia/${BuildConfig.VERSION_NAME}' app/src/main/java/app/nudroidlabs/waktusolat/data/JakimPrayerRepository.kt
+
+          grep -q 'copy(zohor = "07:00:00")' app/src/test/java/app/nudroidlabs/waktusolat/data/PrayerDataValidatorTest.kt
+          grep -q 'fun invalidTimeFails()' app/src/test/java/app/nudroidlabs/waktusolat/data/PrayerDataValidatorTest.kt
+          grep -q 'fun duplicateDatesFail()' app/src/test/java/app/nudroidlabs/waktusolat/data/PrayerDataValidatorTest.kt
+          grep -q 'fun badStatusFails()' app/src/test/java/app/nudroidlabs/waktusolat/data/PrayerDataValidatorTest.kt
+          grep -q 'fun emptyDaysFail()' app/src/test/java/app/nudroidlabs/waktusolat/data/PrayerDataValidatorTest.kt
+
+          grep -q 'android:usesCleartextTraffic="false"' app/src/main/AndroidManifest.xml
+          grep -q 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' app/src/main/AndroidManifest.xml
+          grep -q 'SCHEDULE_EXACT_ALARM' app/src/main/AndroidManifest.xml
+
+          if grep -Rni 'ACCESS_BACKGROUND_LOCATION' app/src/main app/build.gradle.kts; then
+            echo 'ERROR: background location permission is not allowed.'
+            exit 1
+          fi
+
+          if grep -RniE 'READ_CONTACTS|WRITE_CONTACTS|READ_SMS|SEND_SMS|RECEIVE_SMS|READ_PHONE_STATE|CALL_PHONE|RECORD_AUDIO|CAMERA|READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|MANAGE_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE' app/src/main/AndroidManifest.xml; then
+            echo 'ERROR: unrelated high-risk permission detected in source manifest.'
+            exit 1
+          fi
+
+          if grep -Rni 'requestLocationUpdates' app/src/main/java; then
+            echo 'ERROR: continuous location updates detected.'
+            exit 1
+          fi
+
+          if grep -RniF 'import androidx.compose.foundation.layout.weight' app/src/main/java; then
+            echo 'ERROR: invalid Compose weight import detected.'
+            exit 1
+          fi
+
+          if grep -RniE 'requestSingleUpdate\(|Locale\("ms"[[:space:]]*,[[:space:]]*"MY"\)' app/src/main/java; then
+            echo 'ERROR: deprecated M6 APIs returned.'
+            exit 1
+          fi
+
+          if grep -RniF 'context.mainExecutor' app/src/main/java; then
+            echo 'ERROR: API 28 Context.mainExecutor returned; minSdk must remain 26.'
+            exit 1
+          fi
+
+          grep -q 'ContextCompat.getMainExecutor(context)' app/src/main/java/app/nudroidlabs/waktusolat/location/LocationZoneDetector.kt
+          grep -q 'import androidx.core.content.ContextCompat' app/src/main/java/app/nudroidlabs/waktusolat/location/LocationZoneDetector.kt
+          grep -q 'minSdk = 26' app/build.gradle.kts
+
+          grep -q 'versionCode = 18' app/build.gradle.kts
+          grep -q 'versionName = "1.0.0"' app/build.gradle.kts
+          grep -q 'Waktu Solat &amp; Kiblat' app/src/main/res/values/strings.xml
+          grep -q 'TimeFormatMode.HOUR_12' app/src/main/java/app/nudroidlabs/waktusolat/data/TimeFormatPreferences.kt
+          grep -q 'TimeFormatMode.HOUR_24' app/src/main/java/app/nudroidlabs/waktusolat/data/TimeFormatPreferences.kt
+          grep -q 'ic_location_target' app/src/main/java/app/nudroidlabs/waktusolat/ui/HomeScreen.kt
+          grep -q 'requestLocationDetection(autoApplyZone = true)' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+
+          grep -q 'LocationManagerCompat.isLocationEnabled(locationManager)' app/src/main/java/app/nudroidlabs/waktusolat/location/LocationZoneDetector.kt
+          grep -q 'Settings.ACTION_LOCATION_SOURCE_SETTINGS' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'showLocationServicesDialog' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'QiblaAlignmentGate' app/src/main/java/app/nudroidlabs/waktusolat/ui/QiblaScreen.kt
+          grep -q 'ToneGenerator.TONE_PROP_ACK' app/src/main/java/app/nudroidlabs/waktusolat/ui/QiblaScreen.kt
+          grep -q 'android.permission.VIBRATE' app/src/main/AndroidManifest.xml
+          grep -q 'VIBRATE("Getar")' app/src/main/java/app/nudroidlabs/waktusolat/notification/PrayerAlarmScheduler.kt
+
+          if grep -qE 'VibrationEffect|Vibrator|\.vibrate\(' app/src/main/java/app/nudroidlabs/waktusolat/ui/QiblaScreen.kt; then
+            echo 'ERROR: Qibla vibration implementation returned.'
+            exit 1
+          fi
+
+          if grep -q 'Bunyi dan getaran' app/src/main/java/app/nudroidlabs/waktusolat/ui/QiblaScreen.kt; then
+            echo 'ERROR: stale Qibla vibration text returned.'
+            exit 1
+          fi
+          grep -q 'LazyColumn' app/src/main/java/app/nudroidlabs/waktusolat/ui/HomeScreen.kt
+
+          test -s app/src/main/res/raw/azan_builtin_subuh.ogg
+          test -s app/src/main/res/raw/azan_builtin_normal.ogg
+          grep -q 'enum class AzanAudioSource' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPreferences.kt
+          grep -q 'R.raw.azan_builtin_subuh' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPlaybackService.kt
+          grep -q 'R.raw.azan_builtin_normal' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPlaybackService.kt
+          grep -q 'AudioAttributes.USAGE_ALARM' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPlaybackService.kt
+          grep -q 'AzanPreferences.hasPlayableAudio(context)' app/src/main/java/app/nudroidlabs/waktusolat/notification/PrayerAlarmScheduler.kt
+          grep -q 'AzanAudioSource.entries' app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+          grep -q 'azanSource: AzanAudioSource' app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+          grep -q 'azanSource = azanSource,' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app = Path("app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt").read_text()
+          settings = Path("app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt").read_text()
+
+          if "azanSource: AzanAudioSource" not in settings:
+              raise SystemExit("SettingsScreen no longer declares azanSource")
+
+          count = app.count("azanSource = azanSource,")
+          if count != 1:
+              raise SystemExit(
+                  f"Expected exactly one SettingsScreen azanSource wiring, found {count}"
+              )
+
+          print("SettingsScreen azanSource wiring audit: PASS")
+          PY
+
+          test -f app/src/main/assets/BUILT_IN_AZAN_AUDIO.txt
+
+          grep -q 'fun volumePercent(context: Context): Int' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPreferences.kt
+          grep -q 'setVolumePercent(context: Context, percent: Int)' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPreferences.kt
+          grep -q 'mediaPlayer.setVolume(gain, gain)' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPlaybackService.kt
+          grep -q 'azanVolumePercent: Int' app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+          grep -q 'onAzanVolumeChange: (Int) -> Unit' app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+          grep -q 'mutableStateOf(AzanPreferences.volumePercent(appContext))' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+
+          if grep -q 'mutableIntStateOf(AzanPreferences.volumePercent(appContext))' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt; then
+            echo 'ERROR: incompatible mutableIntStateOf azan volume state returned.'
+            exit 1
+          fi
+
+          grep -q 'R.drawable.ic_refresh' app/src/main/java/app/nudroidlabs/waktusolat/ui/HomeScreen.kt
+          test -f app/src/main/res/drawable/ic_refresh.xml
+
+          grep -q 'ACTION_SET_VOLUME' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPlaybackService.kt
+          grep -q 'preview && currentPlaybackIsPreview && player != null' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPlaybackService.kt
+          grep -q 'fun stopPreview(context: Context)' app/src/main/java/app/nudroidlabs/waktusolat/audio/AzanPlaybackService.kt
+          grep -q 'AzanPlaybackService.applyVolume(appContext)' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'AzanPlaybackService.stopPreview(applicationContext)' app/src/main/java/app/nudroidlabs/waktusolat/MainActivity.kt
+          grep -q 'fontSize = 31.sp' app/src/main/java/app/nudroidlabs/waktusolat/ui/HomeScreen.kt
+
+          grep -q 'import androidx.activity.compose.BackHandler' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'tab != AppTab.HOME -> tab = AppTab.HOME' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'else -> showExitConfirmation = true' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'Keluar Waktu Solat & Kiblat?' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'finishAndRemoveTask()' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'AzanPlaybackService.stop(appContext)' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+
+          grep -q 'DOA("Doa", "D")' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'AppTab.DOA -> DoaScreen(' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'val entries: List<DoaEntry>' app/src/main/java/app/nudroidlabs/waktusolat/doa/DoaCatalog.kt
+          grep -q 'Sahih al-Bukhari 6324' app/src/main/java/app/nudroidlabs/waktusolat/doa/DoaCatalog.kt
+          grep -q 'Sahih Muslim 713a' app/src/main/java/app/nudroidlabs/waktusolat/doa/DoaCatalog.kt
+          grep -q "Jami' at-Tirmidhi 3458" app/src/main/java/app/nudroidlabs/waktusolat/doa/DoaCatalog.kt
+          grep -q 'Al-Quran, Al-Baqarah 2:201' app/src/main/java/app/nudroidlabs/waktusolat/doa/DoaCatalog.kt
+          grep -q 'rememberSaveable' app/src/main/java/app/nudroidlabs/waktusolat/ui/DoaScreen.kt
+          test -s app/src/main/assets/DOA_SOURCES.txt
+
+          test -s update.json
+          test -s SELF_UPDATE.md
+          test -s app/src/main/res/xml/update_file_paths.xml
+          grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' app/src/main/AndroidManifest.xml
+          grep -q '\${applicationId}.fileprovider' app/src/main/AndroidManifest.xml
+          grep -q '@xml/update_file_paths' app/src/main/AndroidManifest.xml
+          grep -q 'raw.githubusercontent.com/nudroid12/WaktuSolatMalaysia/main/update.json'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'FileProvider.getUriForFile'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'canRequestPackageInstalls'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'ACTION_MANAGE_UNKNOWN_APP_SOURCES'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'SHA-256 APK tidak sepadan'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'APK tidak ditandatangani dengan kunci aplikasi yang sama.'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'UpdatePreferences.shouldAutoCheck'             app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'Semak kemas kini'             app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+
+          grep -q 'PackageManager.GET_SIGNATURES'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q '@RequiresApi(Build.VERSION_CODES.P)'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q '@RequiresApi(Build.VERSION_CODES.TIRAMISU)'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          if grep -q '@TargetApi('             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt; then
+            echo 'ERROR: UseRequiresApi regression detected before lint.'
+            exit 1
+          fi
+          grep -q 'getArchivePackageInfoLegacy'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'getInstalledPackageInfoLegacy'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q 'signerDigestsLegacy'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+          grep -q '"package:${context.packageName}".toUri()'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt
+
+          if grep -q 'readNBytes('             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt; then
+            echo 'ERROR: readNBytes returned to updater metadata path.'
+            exit 1
+          fi
+
+          grep -q 'kotlinx-coroutines-android:1.11.0' app/build.gradle.kts
+
+          if grep -q 'kotlinx-coroutines-android:1.10.2' app/build.gradle.kts; then
+            echo 'ERROR: stale coroutines 1.10.2 dependency returned.'
+            exit 1
+          fi
+
+          if grep -q 'Build.VERSION.SDK_INT >= Build.VERSION_CODES.O'             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt; then
+            echo 'ERROR: redundant API 26 SDK check returned.'
+            exit 1
+          fi
+
+          if grep -q 'Uri.parse('             app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt; then
+            echo 'ERROR: stale Uri.parse updater path returned.'
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path(
+              "app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt"
+          ).read_text(encoding="utf-8")
+
+          if source.count("PackageManager.GET_SIGNING_CERTIFICATES") != 4:
+              raise SystemExit(
+                  "Unexpected GET_SIGNING_CERTIFICATES occurrence count"
+              )
+
+          required = (
+              "getArchivePackageInfoApi28",
+              "getArchivePackageInfoApi33",
+              "getInstalledPackageInfoApi28",
+              "getInstalledPackageInfoApi33",
+              "PackageManager.GET_SIGNATURES",
+          )
+          missing = [token for token in required if token not in source]
+          if missing:
+              raise SystemExit(
+                  "Updater signing compatibility missing: " + ", ".join(missing)
+              )
+
+          print("M10.1 v4 API propagation audit: PASS")
+          PY
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("update.json").read_text(encoding="utf-8"))
+          required = {"versionCode", "versionName", "apkUrl", "sha256", "releaseNotes"}
+          missing = required.difference(data)
+          if missing:
+              raise SystemExit("update.json missing fields: " + ", ".join(sorted(missing)))
+
+          if data["versionCode"] != 18 or data["versionName"] != "1.0.0":
+              raise SystemExit("Initial update.json must describe current 1.0.0 baseline")
+
+          print("M10.1 updater metadata audit: PASS")
+          PY
+
+          # M10 battery/background static audit.
+          if grep -Rni 'ACCESS_BACKGROUND_LOCATION' app/src/main app/build.gradle.kts; then
+            echo 'ERROR: background location permission is not allowed.'
+            exit 1
+          fi
+
+          if grep -RniE 'WAKE_LOCK|PARTIAL_WAKE_LOCK|newWakeLock|acquire\(' app/src/main app/build.gradle.kts; then
+            echo 'ERROR: explicit wake-lock usage detected.'
+            exit 1
+          fi
+
+          if grep -RniE 'requestLocationUpdates\(|FusedLocationProviderClient.*requestLocationUpdates' app/src/main/java; then
+            echo 'ERROR: continuous location updates detected.'
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          worker = Path(
+              "app/src/main/java/app/nudroidlabs/waktusolat/notification/PrayerRefreshWorker.kt"
+          ).read_text(encoding="utf-8")
+
+          required_worker_tokens = (
+              "PeriodicWorkRequest.Builder(",
+              "PrayerRefreshWorker::class.java",
+              "24,",
+              "TimeUnit.HOURS",
+              "NetworkType.CONNECTED",
+              "ExistingPeriodicWorkPolicy.UPDATE",
+          )
+
+          missing = [
+              token for token in required_worker_tokens
+              if token not in worker
+          ]
+          if missing:
+              raise SystemExit(
+                  "PrayerRefreshWorker 24-hour audit missing: " + ", ".join(missing)
+              )
+
+          app = Path(
+              "app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt"
+          ).read_text(encoding="utf-8")
+          receiver = Path(
+              "app/src/main/java/app/nudroidlabs/waktusolat/notification/RescheduleReceiver.kt"
+          ).read_text(encoding="utf-8")
+
+          if "PrayerRefreshWorker.ensureScheduled(appContext)" not in app:
+              raise SystemExit("PrayerRefreshWorker is not scheduled from app startup")
+
+          if "PrayerRefreshWorker.ensureScheduled(appContext)" not in receiver:
+              raise SystemExit("PrayerRefreshWorker is not restored by RescheduleReceiver")
+
+          print("M10 24-hour PrayerRefreshWorker audit: PASS")
+          PY
+
+          grep -q 'AzanPlaybackService' app/src/main/AndroidManifest.xml
+          grep -q 'class PrayerRefreshWorker'             app/src/main/java/app/nudroidlabs/waktusolat/notification/PrayerRefreshWorker.kt
+
+          if grep -qE 'AppTab\.WEEK|WeekScreen\(' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt; then
+            echo 'ERROR: 7 Hari navigation returned.'
+            exit 1
+          fi
+
+          if grep -q 'Aplikasi akan ditutup' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt; then
+            echo 'ERROR: exit confirmation explanatory paragraph returned.'
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          catalog = Path(
+              "app/src/main/java/app/nudroidlabs/waktusolat/doa/DoaCatalog.kt"
+          ).read_text(encoding="utf-8")
+
+          count = catalog.count("        DoaEntry(")
+          if count != 13:
+              raise SystemExit(f"Expected 13 Doa Harian entries, found {count}")
+
+          required = (
+              "arabic =",
+              "rumi =",
+              "meaningMalay =",
+              "reference =",
+          )
+          for field in required:
+              if catalog.count(field) != 13:
+                  raise SystemExit(
+                      f"Expected 13 occurrences of {field!r}, found {catalog.count(field)}"
+                  )
+
+          print("M10 Doa catalog static audit: PASS")
+          PY
+
+          if grep -q 'Kemas kini sekarang' app/src/main/java/app/nudroidlabs/waktusolat/ui/HomeScreen.kt; then
+            echo 'ERROR: large data refresh button returned.'
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          home = Path(
+              "app/src/main/java/app/nudroidlabs/waktusolat/ui/HomeScreen.kt"
+          ).read_text()
+
+          location = home.find('"${zone.state} · $zoneCode"')
+          upcoming = home.find('"SOLAT SETERUSNYA"')
+          today = home.find('title = "Waktu hari ini"')
+          status = home.find("DataStatusCard(")
+
+          if min(location, upcoming, today, status) < 0:
+              raise SystemExit("Could not locate Home ordering markers")
+
+          if not location < upcoming < today < status:
+              raise SystemExit(
+                  "Home order must be location -> next prayer -> prayer times -> status data"
+              )
+
+          print("M10 Home ordering audit: PASS")
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in (
+              Path("app/src/main/res/raw/azan_builtin_subuh.ogg"),
+              Path("app/src/main/res/raw/azan_builtin_normal.ogg"),
+          ):
+              data = path.read_bytes()
+              if data[:4] != b"OggS":
+                  raise SystemExit(f"Invalid Ogg audio: {path}")
+          print("Built-in azan resource audit: PASS")
+          PY
+
+          if grep -q 'performHapticFeedback' app/src/main/java/app/nudroidlabs/waktusolat/ui/QiblaScreen.kt; then
+            echo 'ERROR: Compose-only qibla haptic implementation returned.'
+            exit 1
+          fi
+
+          if grep -q 'LocalHapticFeedback' app/src/main/java/app/nudroidlabs/waktusolat/ui/QiblaScreen.kt; then
+            echo 'ERROR: obsolete qibla haptic import returned.'
+            exit 1
+          fi
+          test -f app/src/test/java/app/nudroidlabs/waktusolat/qibla/QiblaAlignmentGateTest.kt
+
+          grep -q 'com.google.android.gms:play-services-location:21.4.0' app/build.gradle.kts
+          grep -q 'ActivityResultContracts.StartIntentSenderForResult' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'ResolvableApiException' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'GoogleApiAvailability' app/src/main/java/app/nudroidlabs/waktusolat/ui/WaktuSolatApp.kt
+          grep -q 'SettingsSectionHeader' app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+          grep -q 'rememberSaveable' app/src/main/java/app/nudroidlabs/waktusolat/ui/SettingsScreen.kt
+          grep -q '"Dhuha" to day.dhuha' app/src/main/java/app/nudroidlabs/waktusolat/ui/Components.kt
+
+          if grep -Rni '"Duha"' app/src/main/java; then
+            echo 'ERROR: old Duha label remains.'
+            exit 1
+          fi
+
+          if grep -RniF 'import androidx.compose.foundation.layout.weight' app/src/main/java; then
+            echo 'ERROR: invalid Compose weight import returned.'
+            exit 1
+          fi
+
+          if grep -RniE 'app\.kcs|com\.kcs|package[[:space:]]+.*kcs' app; then
+            echo 'ERROR: KCS identifier found.'
+            exit 1
+          fi
+
+          if grep -niE 'firebase-analytics|play-services-ads|appsflyer|adjust-android|facebook-android-sdk' app/build.gradle.kts; then
+            echo 'ERROR: analytics or advertising dependency detected.'
+            exit 1
+          fi
+
+          grep -q '24,' app/src/main/java/app/nudroidlabs/waktusolat/notification/PrayerRefreshWorker.kt
+          grep -q 'TimeUnit.HOURS' app/src/main/java/app/nudroidlabs/waktusolat/notification/PrayerRefreshWorker.kt
+          grep -q 'unregisterListener' app/src/main/java/app/nudroidlabs/waktusolat/qibla/QiblaSensor.kt
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import xml.etree.ElementTree as ET
+
+          for path in Path('app/src/main/res').rglob('*.xml'):
+              ET.parse(path)
+          ET.parse('app/src/main/AndroidManifest.xml')
+
+          missing = []
+          for path in Path('app/src/main/java').rglob('*.kt'):
+              text = path.read_text(encoding='utf-8')
+              if re.search(r'\.edit\s*\{', text) and 'import androidx.core.content.edit' not in text:
+                  missing.append(str(path))
+          if missing:
+              raise SystemExit('Missing androidx.core.content.edit import: ' + ', '.join(missing))
+
+          test = Path('app/src/test/java/app/nudroidlabs/waktusolat/data/PrayerDataValidatorTest.kt').read_text(encoding='utf-8')
+          if 'copy(zohor = "08:00:00")' in test:
+              raise SystemExit('Old M7 false-positive unordered test data is still present')
+          PY
+
+          echo "Running whitespace audit..."
+          if ! git diff --check; then
+            echo "ERROR: git diff --check found whitespace or blank-line-at-EOF problems."
+            exit 1
+          fi
+
+      - name: Set up JDK 17
+        id: java
+        if: steps.audit.outcome == 'success'
+        uses: actions/setup-java@v4
+        continue-on-error: true
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK tools
+        id: android
+        if: steps.java.outcome == 'success'
+        uses: android-actions/setup-android@v4
+        continue-on-error: true
+
+      - name: Prepare Android API 37 platform
+        id: sdk
+        if: steps.android.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "ANDROID_SDK" > .m9-stage
+
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "build-tools;36.0.0"
+
+          PLATFORM_DIR=""
+          for candidate in android-37.0 android-37; do
+            if [ -f "$ANDROID_HOME/platforms/$candidate/android.jar" ]; then
+              PLATFORM_DIR="$ANDROID_HOME/platforms/$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$PLATFORM_DIR" ]; then
+            PACKAGE="$({ sdkmanager --list || true; } | awk -F'|' '
+              /platforms;android-37([.]0)?[[:space:]]*[|]/ {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1)
+                print $1
+                exit
+              }
+            ')"
+            if [ -z "$PACKAGE" ]; then
+              echo 'ERROR: No installable Android API 37 platform found.'
+              ls -1 "$ANDROID_HOME/platforms" || true
+              exit 1
+            fi
+            sdkmanager "$PACKAGE"
+
+            for candidate in android-37.0 android-37; do
+              if [ -f "$ANDROID_HOME/platforms/$candidate/android.jar" ]; then
+                PLATFORM_DIR="$ANDROID_HOME/platforms/$candidate"
+                break
+              fi
+            done
+          fi
+
+          test -n "$PLATFORM_DIR"
+          test -f "$PLATFORM_DIR/android.jar"
+          test -d "$ANDROID_HOME/build-tools/36.0.0"
+          echo "Using Android platform: $PLATFORM_DIR"
+
+      - name: Set up Gradle 9.4.1
+        id: gradle
+        if: steps.sdk.outcome == 'success'
+        uses: gradle/actions/setup-gradle@v4
+        continue-on-error: true
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Prepare optional release signing
+        id: signing
+        if: steps.gradle.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "SIGNING_PREP" > .m9-stage
+
+          present=0
+          [ -n "${RELEASE_KEYSTORE_BASE64:-}" ] && present=$((present + 1))
+          [ -n "${RELEASE_KEYSTORE_PASSWORD:-}" ] && present=$((present + 1))
+          [ -n "${RELEASE_KEY_ALIAS:-}" ] && present=$((present + 1))
+          [ -n "${RELEASE_KEY_PASSWORD:-}" ] && present=$((present + 1))
+
+          if [ "$present" -eq 0 ]; then
+            echo "M9_SIGNING_MODE=unsigned" >> "$GITHUB_ENV"
+            echo "No release signing secrets found. RC will be built unsigned."
+          elif [ "$present" -ne 4 ]; then
+            echo "ERROR: release signing secrets are only partially configured."
+            echo "Set all four or none:"
+            echo "  RELEASE_KEYSTORE_BASE64"
+            echo "  RELEASE_KEYSTORE_PASSWORD"
+            echo "  RELEASE_KEY_ALIAS"
+            echo "  RELEASE_KEY_PASSWORD"
+            exit 1
+          else
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > /tmp/wsk-release.jks
+            test -s /tmp/wsk-release.jks
+
+            echo "ANDROID_KEYSTORE_PATH=/tmp/wsk-release.jks" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYSTORE_PASSWORD=$RELEASE_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=$RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=$RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "M9_SIGNING_MODE=signed" >> "$GITHUB_ENV"
+            echo "Release signing material prepared without printing secrets."
+          fi
+
+      - name: Capture release dependencies
+        id: dependencies
+        if: steps.signing.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "DEPENDENCY_AUDIT" > .m9-stage
+          gradle --no-daemon -q :app:dependencies             --configuration releaseRuntimeClasspath             > release-dependencies.txt 2>&1
+
+      - name: Unit tests
+        id: unit
+        if: steps.dependencies.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "UNIT_TESTS" > .m9-stage
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest 2>&1 | tee unit-test.log
+
+      - name: Compile debug and release variants
+        id: build
+        if: steps.unit.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "COMPILE_VARIANTS" > .m9-stage
+          gradle --no-daemon --stacktrace             :app:assembleDebug             :app:assembleRelease             :app:bundleRelease             2>&1 | tee build.log
+
+      - name: Lint debug and release variants
+        id: lint
+        if: steps.build.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "LINT_VARIANTS" > .m9-stage
+          gradle --no-daemon --stacktrace :app:lintDebug :app:lintRelease 2>&1 | tee lint.log
+
+      - name: M10 release hardening audit
+        id: hardening
+        if: steps.lint.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "HARDENING_AUDIT" > .m9-stage
+
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          RELEASE_AAB="$(find app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' | head -n 1)"
+
+          test -s "$DEBUG_APK"
+          test -n "$RELEASE_APK"
+          test -s "$RELEASE_APK"
+          test -n "$RELEASE_AAB"
+          test -s "$RELEASE_AAB"
+          test -f app/build/reports/lint-results-debug.html
+          test -f app/build/reports/lint-results-release.html
+
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          ZIPALIGN="$ANDROID_HOME/build-tools/36.0.0/zipalign"
+          test -x "$AAPT"
+          test -x "$APKSIGNER"
+          test -x "$ZIPALIGN"
+
+          "$AAPT" dump badging "$DEBUG_APK" > debug-badging.txt
+          "$AAPT" dump badging "$RELEASE_APK" > release-badging.txt
+          "$AAPT" dump permissions "$RELEASE_APK" > release-permissions.txt
+          grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' release-permissions.txt
+
+          grep -q "package: name='app.nudroidlabs.waktusolat'" debug-badging.txt
+          grep -q "versionName='1.0.0'" debug-badging.txt
+          grep -q "targetSdkVersion:'37'" debug-badging.txt
+          grep -q "package: name='app.nudroidlabs.waktusolat'" release-badging.txt
+          grep -q "versionName='1.0.0'" release-badging.txt
+          grep -q "targetSdkVersion:'37'" release-badging.txt
+
+          if grep -Ei 'ACCESS_BACKGROUND_LOCATION|READ_CONTACTS|WRITE_CONTACTS|READ_SMS|SEND_SMS|RECEIVE_SMS|READ_PHONE_STATE|CALL_PHONE|RECORD_AUDIO|CAMERA|MANAGE_EXTERNAL_STORAGE' release-permissions.txt; then
+            echo 'ERROR: unexpected high-risk permission found in merged release APK.'
+            exit 1
+          fi
+
+          "$ZIPALIGN" -c -P 16 -v 4 "$RELEASE_APK" > zipalign-check.txt
+
+          if "$APKSIGNER" verify --verbose "$RELEASE_APK" > apksigner-check.txt 2>&1; then
+            echo "Release APK signature verification: PASS" >> apksigner-check.txt
+            DETECTED_SIGNING="signed"
+          else
+            if [ "${M9_SIGNING_MODE:-unsigned}" = "signed" ]; then
+              echo "ERROR: signing secrets were supplied but release APK did not verify."
+              cat apksigner-check.txt
+              exit 1
+            fi
+            echo "Unsigned RC expected because no release signing secrets were configured." > apksigner-check.txt
+            DETECTED_SIGNING="unsigned"
+          fi
+
+          sha256sum "$DEBUG_APK" "$RELEASE_APK" "$RELEASE_AAB" > release-sha256.txt
+
+          python3 - "$RELEASE_APK" "$RELEASE_AAB" <<'PY'
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          apk_path = Path(sys.argv[1])
+          aab_path = Path(sys.argv[2])
+
+          def report(path: Path, out_name: str):
+              with zipfile.ZipFile(path) as z:
+                  rows = []
+                  total_uncompressed = 0
+                  total_compressed = 0
+                  for info in z.infolist():
+                      if info.is_dir():
+                          continue
+                      total_uncompressed += info.file_size
+                      total_compressed += info.compress_size
+                      rows.append(
+                          (info.file_size, info.compress_size, info.filename)
+                      )
+
+              rows.sort(reverse=True)
+              lines = [
+                  f"FILE: {path}",
+                  f"ARCHIVE_BYTES: {path.stat().st_size}",
+                  f"TOTAL_ENTRY_UNCOMPRESSED_BYTES: {total_uncompressed}",
+                  f"TOTAL_ENTRY_COMPRESSED_BYTES: {total_compressed}",
+                  "",
+                  "TOP 40 ENTRIES BY UNCOMPRESSED SIZE",
+                  "-----------------------------------",
+              ]
+              for uncompressed, compressed, name in rows[:40]:
+                  lines.append(
+                      f"{uncompressed:12d}  {compressed:12d}  {name}"
+                  )
+
+              Path(out_name).write_text(
+                  "\n".join(lines) + "\n",
+                  encoding="utf-8"
+              )
+
+          report(apk_path, "apk-size-top.txt")
+          report(aab_path, "aab-size-top.txt")
+          PY
+
+          {
+            echo 'BUILT-IN AUDIO SOURCE FILES'
+            echo '==========================='
+            find app/src/main/res/raw -maxdepth 1 -type f -printf '%s  %f\n'               2>/dev/null | sort -nr || true
+          } > bundled-audio-size.txt
+
+          DEBUG_BYTES=$(stat -c%s "$DEBUG_APK")
+          RELEASE_APK_BYTES=$(stat -c%s "$RELEASE_APK")
+          RELEASE_AAB_BYTES=$(stat -c%s "$RELEASE_AAB")
+
+          {
+            echo 'WAKTU SOLAT & KIBLAT M10 FINAL RELEASE'
+            echo '========================================='
+            echo
+            echo 'Version: 1.0.0'
+            echo 'Version code: 18'
+            echo 'Application ID: app.nudroidlabs.waktusolat'
+            echo 'Target SDK: 37'
+            echo 'Min SDK: 26'
+            echo 'Feature freeze: YES'
+            echo 'R8 minification: ENABLED'
+            echo 'Resource shrinking: ENABLED'
+            echo "Signing mode: $DETECTED_SIGNING"
+            echo 'Debug unit tests: PASS'
+            echo 'Debug APK build: PASS'
+            echo 'Release APK build: PASS'
+            echo 'Release AAB build: PASS'
+            echo 'Debug lint: PASS'
+            echo 'Release lint: PASS'
+            echo 'Permission denylist audit: PASS'
+            echo 'Background-location audit: PASS'
+            echo 'APK zip alignment: PASS'
+            echo 'APK content size analysis: PASS'
+            echo 'AAB content size analysis: PASS'
+            echo 'Release dependency capture: PASS'
+            echo 'Continuous background GPS: NOT DETECTED'
+            echo 'Explicit wake lock: NOT DETECTED'
+            echo 'Prayer refresh cadence static audit: 24 HOURS'
+            echo "Debug APK bytes: $DEBUG_BYTES"
+            echo "Release APK bytes: $RELEASE_APK_BYTES"
+            echo "Release AAB bytes: $RELEASE_AAB_BYTES"
+            echo
+            echo 'APK/AAB size is informational only and is not a release gate.'
+          } > m9-readiness.txt
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          summaries = []
+          total_tests = total_failures = total_errors = total_skipped = 0
+
+          variant = "testDebugUnitTest"
+          files = sorted(Path(f"app/build/test-results/{variant}").glob("TEST-*.xml"))
+          tests = failures = errors = skipped = 0
+          for file in files:
+              root = ET.parse(file).getroot()
+              tests += int(root.attrib.get("tests", 0))
+              failures += int(root.attrib.get("failures", 0))
+              errors += int(root.attrib.get("errors", 0))
+              skipped += int(root.attrib.get("skipped", 0))
+
+          if not files or failures or errors:
+              raise SystemExit(
+                  f"{variant} report not clean: files={len(files)} failures={failures} errors={errors}"
+              )
+
+          summaries.append(
+              f"{variant}: tests={tests} failures={failures} errors={errors} skipped={skipped}"
+          )
+          total_tests += tests
+          total_failures += failures
+          total_errors += errors
+          total_skipped += skipped
+
+          summaries.append(
+              f"TOTAL: tests={total_tests} failures={total_failures} errors={total_errors} skipped={total_skipped}"
+          )
+          Path("unit-test-summary.txt").write_text(
+              "\n".join(summaries) + "\n",
+              encoding="utf-8"
+          )
+          PY
+
+          printf '%s\n' "$RELEASE_APK" > release-apk-path.txt
+          printf '%s\n' "$RELEASE_AAB" > release-aab-path.txt
+
+          cat unit-test-summary.txt
+          cat m9-readiness.txt
+          cat release-permissions.txt
+
+      - name: Verify M10 outputs
+        id: verify
+        if: steps.hardening.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "VERIFY_OUTPUT" > .m9-stage
+          RELEASE_APK="$(cat release-apk-path.txt)"
+          RELEASE_AAB="$(cat release-aab-path.txt)"
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s "$RELEASE_APK"
+          test -s "$RELEASE_AAB"
+          test -s m9-readiness.txt
+          test -s release-sha256.txt
+          test -s release-permissions.txt
+          test -s zipalign-check.txt
+          test -s apksigner-check.txt
+          test -s apk-size-top.txt
+          test -s aab-size-top.txt
+          test -s bundled-audio-size.txt
+          test -s release-dependencies.txt
+
+      - name: Commit M10.1 updater v2 after full success
+        id: commit
+        if: steps.verify.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "COMMIT" > .m9-stage
+          git config user.name "NudroidLabs Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          # CI reports/build outputs are ignored by the cleanup step, so -A stages
+          # product source, .gitignore and intentional obsolete-file deletions only.
+          if git diff --cached --quiet; then
+            echo 'M10.1 updater source is already committed.'
+          else
+            git commit -m "Add verified in-app updater before final signing"
+            git push origin HEAD:main
+          fi
+
+      - name: Upload M10.1 updater v2 artifacts
+        id: success_upload
+        if: steps.verify.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: Waktu-Solat-Kiblat-1.0.0-M10.1-Updater-v4
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/mapping/release/
+            release-sha256.txt
+            m9-readiness.txt
+            unit-test-summary.txt
+            release-permissions.txt
+            release-badging.txt
+            zipalign-check.txt
+            apksigner-check.txt
+            apk-size-top.txt
+            aab-size-top.txt
+            bundled-audio-size.txt
+            release-dependencies.txt
+            repo-cleanup-report.txt
+            update.json
+            SELF_UPDATE.md
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-release.html
+          if-no-files-found: error
+          retention-days: 21
+
+      - name: Create detailed failure diagnostic
+        if: always() && (steps.precheck.outcome == 'failure' || steps.patch.outcome == 'failure' || steps.audio.outcome == 'failure' || steps.cleanup.outcome == 'failure' || steps.audit.outcome == 'failure' || steps.java.outcome == 'failure' || steps.android.outcome == 'failure' || steps.sdk.outcome == 'failure' || steps.gradle.outcome == 'failure' || steps.signing.outcome == 'failure' || steps.dependencies.outcome == 'failure' || steps.unit.outcome == 'failure' || steps.build.outcome == 'failure' || steps.lint.outcome == 'failure' || steps.hardening.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.commit.outcome == 'failure' || steps.success_upload.outcome == 'failure')
+        shell: bash
+        run: |
+          set +e
+          STAGE="$(cat .m9-stage 2>/dev/null || echo UNKNOWN)"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          out = []
+          files = sorted(Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'))
+          if not files:
+              out.append('No JUnit XML files were produced.')
+          for file in files:
+              try:
+                  root = ET.parse(file).getroot()
+              except Exception as exc:
+                  out.append(f'Could not parse {file}: {exc}')
+                  continue
+              for case in root.findall('testcase'):
+                  failure = case.find('failure')
+                  error = case.find('error')
+                  problem = failure if failure is not None else error
+                  if problem is not None:
+                      out.append(f"FAILED: {case.attrib.get('classname')} > {case.attrib.get('name')}")
+                      message = problem.attrib.get('message')
+                      if message:
+                          out.append(f'MESSAGE: {message}')
+                      text = (problem.text or '').strip()
+                      if text:
+                          out.extend(text.splitlines()[:80])
+                      out.append('')
+          Path('junit-failures.txt').write_text('\n'.join(out) + '\n', encoding='utf-8')
+          PY
+
+          {
+            echo 'WAKTU SOLAT & KIBLAT M10.1 v4 BUILD DIAGNOSE'
+            echo '======================================'
+            echo
+            echo 'RESULT: FAILED'
+            echo "LAST STAGE: $STAGE"
+            echo
+            echo 'STEP OUTCOMES'
+            echo '-------------'
+            echo "precheck=${{ steps.precheck.outcome }}"
+            echo "patch=${{ steps.patch.outcome }}"
+            echo "audio=${{ steps.audio.outcome }}"
+            echo "cleanup=${{ steps.cleanup.outcome }}"
+            echo "audit=${{ steps.audit.outcome }}"
+            echo "java=${{ steps.java.outcome }}"
+            echo "android=${{ steps.android.outcome }}"
+            echo "sdk=${{ steps.sdk.outcome }}"
+            echo "gradle=${{ steps.gradle.outcome }}"
+            echo "unit=${{ steps.unit.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo "lint=${{ steps.lint.outcome }}"
+            echo "hardening=${{ steps.hardening.outcome }}"
+            echo "verify=${{ steps.verify.outcome }}"
+            echo "commit=${{ steps.commit.outcome }}"
+            echo "success_upload=${{ steps.success_upload.outcome }}"
+            echo
+            echo 'BUILD CONFIG'
+            echo '------------'
+            grep -nE 'compileSdk|targetSdk|versionCode|versionName|warningsAsErrors' app/build.gradle.kts 2>/dev/null || true
+            echo
+            echo 'APPLY PATCH LOG'
+            echo '---------------'
+            cat patch.log 2>/dev/null || true
+            echo
+            echo 'AUDIO CHECK LOG'
+            echo '---------------'
+            cat audio-fetch.log 2>/dev/null || true
+            echo
+            echo 'STATIC AUDIT LOG'
+            echo '----------------'
+            cat static-audit.log 2>/dev/null || true
+            echo
+            echo 'JUNIT FAILURES'
+            echo '--------------'
+            cat junit-failures.txt 2>/dev/null || true
+            echo
+            echo 'UNIT TEST ERROR CANDIDATES'
+            echo '--------------------------'
+            grep -nEi 'FAILED|AssertionError|expected|actual|Exception|FAILURE:|What went wrong|Execution failed' unit-test.log 2>/dev/null | tail -n 200 || true
+            echo
+            echo 'COMPILE ERROR CANDIDATES'
+            echo '------------------------'
+            for log in unit-test.log build.log lint.log; do
+              if [ -f "$log" ]; then
+                echo "[$log]"
+                grep -nEi '(^e: |error:|FAILURE:|What went wrong|Execution failed|Unresolved reference|Cannot infer type|Compilation error|compileDebugKotlin|compileReleaseKotlin|Manifest merger failed|Could not resolve|Could not find)' "$log" | tail -n 220 || true
+              fi
+            done
+            echo
+            echo 'LINT ERROR CANDIDATES'
+            echo '---------------------'
+            grep -nEi 'error:|warning:|Lint found|ObsoleteSdkInt|MissingPermission|NewApi|ExpiredTargetSdkVersion' lint.log 2>/dev/null | tail -n 260 || true
+            echo
+            echo 'LAST UNIT TEST LOG'
+            echo '------------------'
+            tail -n 180 unit-test.log 2>/dev/null || true
+            echo
+            echo 'LAST BUILD LOG'
+            echo '--------------'
+            tail -n 180 build.log 2>/dev/null || true
+            echo
+            echo 'USE_REQUIRES_API CANDIDATES'
+            echo '---------------------------'
+            grep -Rni 'UseRequiresApi\|@TargetApi'               app/build/reports app/build/intermediates lint.log 2>/dev/null |
+              tail -n 120 || true
+            echo
+
+            echo 'FULL LINT TEXT REPORTS'
+            echo '----------------------'
+            find app/build/intermediates -type f               -path '*lint*' -name 'lint-results-*.txt' -print 2>/dev/null |
+              while IFS= read -r report; do
+                echo
+                echo "===== $report ====="
+                cat "$report"
+              done || true
+            echo
+
+            echo 'LAST LINT LOG'
+            echo '-------------'
+            tail -n 220 lint.log 2>/dev/null || true
+          } > build-diagnose.txt
+
+          cat build-diagnose.txt
+
+      - name: Upload M10.1 v4 failure diagnostic
+        if: always() && (steps.precheck.outcome == 'failure' || steps.patch.outcome == 'failure' || steps.audio.outcome == 'failure' || steps.cleanup.outcome == 'failure' || steps.audit.outcome == 'failure' || steps.java.outcome == 'failure' || steps.android.outcome == 'failure' || steps.sdk.outcome == 'failure' || steps.gradle.outcome == 'failure' || steps.signing.outcome == 'failure' || steps.dependencies.outcome == 'failure' || steps.unit.outcome == 'failure' || steps.build.outcome == 'failure' || steps.lint.outcome == 'failure' || steps.hardening.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.commit.outcome == 'failure' || steps.success_upload.outcome == 'failure')
+        uses: actions/upload-artifact@v4
+        with:
+          name: Waktu-Solat-Kiblat-M10.1-v4-build-diagnose
+          path: |
+            build-diagnose.txt
+            patch.log
+            audio-fetch.log
+            static-audit.log
+            junit-failures.txt
+            unit-test.log
+            build.log
+            lint.log
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.txt
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-release.txt
+            app/build/reports/lint-results-release.html
+            debug-badging.txt
+            release-badging.txt
+            m9-readiness.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail workflow if any M10.1 v4 gate failed
+        if: always() && (steps.precheck.outcome == 'failure' || steps.patch.outcome == 'failure' || steps.audio.outcome == 'failure' || steps.cleanup.outcome == 'failure' || steps.audit.outcome == 'failure' || steps.java.outcome == 'failure' || steps.android.outcome == 'failure' || steps.sdk.outcome == 'failure' || steps.gradle.outcome == 'failure' || steps.signing.outcome == 'failure' || steps.dependencies.outcome == 'failure' || steps.unit.outcome == 'failure' || steps.build.outcome == 'failure' || steps.lint.outcome == 'failure' || steps.hardening.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.commit.outcome == 'failure' || steps.success_upload.outcome == 'failure')
+        shell: bash
+        run: exit 1
