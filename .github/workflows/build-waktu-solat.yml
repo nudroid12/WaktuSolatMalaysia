@@ -87,13 +87,22 @@ jobs:
               echo "::error::RELEASE_KEYSTORE_BASE64 is not valid Base64. Encode the keystore file itself."
               exit 1
             fi
-            export ANDROID_KEY_ALIAS=waktusolat
-            export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
-            if ! keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -alias "$ANDROID_KEY_ALIAS" \
-              -storepass:env ANDROID_KEYSTORE_PASSWORD; then
-              echo "::error::Cannot open the signing keystore or find alias waktusolat. Check the keystore, password and alias."
+            if ! entries="$(keytool -J-Duser.language=en -J-Duser.country=US -list -v \
+              -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD)"; then
+              echo "::error::Cannot open the signing keystore. Check the file and keystore password."
               exit 1
             fi
+            mapfile -t aliases < <(awk '
+              /^Alias name: / { alias = substr($0, length("Alias name: ") + 1) }
+              /^Entry type: PrivateKeyEntry$/ { print alias }
+            ' <<< "$entries")
+            if (( ${#aliases[@]} != 1 )); then
+              echo "::error::Expected exactly one signing key in the keystore, found ${#aliases[@]}. Use a keystore containing only the app signing key."
+              exit 1
+            fi
+            export ANDROID_KEY_ALIAS="${aliases[0]}"
+            export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+            unset entries aliases
             tasks+=(:app:assembleRelease :app:bundleRelease)
           elif (( signing_count != 0 )); then
             echo "::error::A signed release needs RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD."
