@@ -30,18 +30,34 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val leadMinutes = intent.getIntExtra(PrayerAlarmScheduler.EXTRA_LEAD_MINUTES, 0)
 
         val isEntry = kind == PrayerAlarmScheduler.KIND_ENTRY
-        val notificationEnabled = PrayerAlarmScheduler.notificationsEnabled(context) &&
-            PrayerAlarmScheduler.prayerEnabled(context, prayerName)
-        val canPostNotification = notificationEnabled &&
-            PrayerAlarmScheduler.hasNotificationPermission(context)
         val canPlayAzan = isEntry &&
             PrayerAlarmScheduler.canScheduleExact(context) &&
             AzanPreferences.enabledForPrayer(context, prayerName)
 
-        val azanStarted = canPlayAzan &&
-            runCatching { AzanPlaybackService.start(context, prayerName) }.isSuccess
+        if (canPlayAzan && runCatching {
+                AzanPlaybackService.start(context, prayerName, prayerTime, zoneCode)
+            }.isSuccess
+        ) return
 
-        if (canPostNotification) {
+        notifyPrayer(context, prayerName, prayerTime, zoneCode, kind, leadMinutes)
+    }
+
+    companion object {
+        fun notifyPrayer(
+            context: Context,
+            prayerName: String,
+            prayerTime: String,
+            zoneCode: String,
+            kind: String = PrayerAlarmScheduler.KIND_ENTRY,
+            leadMinutes: Int = 0,
+            azanStarted: Boolean = false
+        ) {
+            if (zoneCode != JakimPrayerRepository(context).savedZone() ||
+                !PrayerAlarmScheduler.notificationsEnabled(context) ||
+                !PrayerAlarmScheduler.prayerEnabled(context, prayerName) ||
+                !PrayerAlarmScheduler.hasNotificationPermission(context)
+            ) return
+
             PrayerAlarmScheduler.createNotificationChannels(context)
 
             val openApp = PendingIntent.getActivity(
@@ -95,14 +111,13 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             }
         }
 
+        @SuppressLint("MissingPermission")
+        private fun postNotification(
+            context: Context,
+            notificationId: Int,
+            builder: NotificationCompat.Builder
+        ) {
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+        }
     }
-    @SuppressLint("MissingPermission")
-    private fun postNotification(
-        context: Context,
-        notificationId: Int,
-        builder: NotificationCompat.Builder
-    ) {
-        NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-    }
-
 }

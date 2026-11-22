@@ -19,12 +19,17 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import app.nudroidlabs.waktusolat.MainActivity
 import app.nudroidlabs.waktusolat.R
+import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
+import app.nudroidlabs.waktusolat.notification.PrayerAlarmReceiver
+import app.nudroidlabs.waktusolat.notification.PrayerAlarmScheduler
 
 class AzanPlaybackService : Service() {
     private var player: MediaPlayer? = null
     private var focusRequest: AudioFocusRequest? = null
     private var currentPlaybackIsPreview = false
     private val handler = Handler(Looper.getMainLooper())
+    private val prepareTimeout = Runnable { stopPlayback() }
+    private var pendingReminder: ((Boolean) -> Unit)? = null
     private val stopSafety = Runnable { stopPlayback() }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -46,20 +51,40 @@ class AzanPlaybackService : Service() {
                         AzanAudioSource.entries.firstOrNull { it.name == raw }
                     }
                 val source = sourceOverride ?: AzanPreferences.source(this)
-                val uri = playbackUri(prayerName, source)
-
                 if (preview && currentPlaybackIsPreview && player != null) {
                     stopPlayback()
-                } else if (uri == null) {
-                    stopSelf()
-                } else {
-                    startPlayback(
-                        prayerName = prayerName,
-                        uri = uri,
-                        preview = preview,
-                        source = source
-                    )
+                    return START_NOT_STICKY
                 }
+
+                val zone = intent.getStringExtra(EXTRA_ZONE)
+                val prayerTime = intent.getStringExtra(EXTRA_PRAYER_TIME)
+                if (!preview && (zone != JakimPrayerRepository(this).savedZone() ||
+                        !PrayerAlarmScheduler.canScheduleExact(this) ||
+                        !AzanPreferences.enabledForPrayer(this, prayerName))
+                ) {
+                    if (zone != null && prayerTime != null) {
+                        PrayerAlarmReceiver.notifyPrayer(this, prayerName, prayerTime, zone)
+                    }
+                    if (player == null) stopSelf()
+                    return START_NOT_STICKY
+                }
+
+                stopPlayback(stopService = false)
+                if (!preview && zone != null && prayerTime != null) {
+                    pendingReminder = { playing ->
+                        PrayerAlarmReceiver.notifyPrayer(
+                            this, prayerName, prayerTime, zone, azanStarted = playing
+                        )
+                    }
+                }
+
+                val uri = playbackUri(prayerName, source)
+                if (uri == null) {
+                    stopPlayback()
+                    return START_NOT_STICKY
+                }
+                runCatching { startPlayback(prayerName, uri, preview, source) }
+                    .onFailure { stopPlayback() }
             }
         }
         return START_NOT_STICKY
@@ -91,7 +116,6 @@ class AzanPlaybackService : Service() {
         preview: Boolean,
         source: AzanAudioSource
     ) {
-        stopPlayback(stopService = false)
         currentPlaybackIsPreview = preview
         createChannel()
         startForeground(
@@ -128,15 +152,22 @@ class AzanPlaybackService : Service() {
                 player = this
                 setAudioAttributes(attributes)
                 setDataSource(this@AzanPlaybackService, uri)
-                setOnPreparedListener {
-                    applyCurrentVolume(it)
-                    it.start()
-                    handler.removeCallbacks(stopSafety)
-                    handler.postDelayed(stopSafety, MAX_PLAYBACK_MS)
+                setOnPreparedListener { prepared ->
+                    if (prepared !== player) return@setOnPreparedListener
+                    handler.removeCallbacks(prepareTimeout)
+                    runCatching {
+                        applyCurrentVolume(prepared)
+                        prepared.start()
+                    }.onSuccess {
+                        dispatchReminder(playing = true)
+                        handler.postDelayed(stopSafety, MAX_PLAYBACK_MS)
+                    }.onFailure {
+                        stopPlayback()
+                    }
                 }
-                setOnCompletionListener { stopPlayback() }
-                setOnErrorListener { _, _, _ ->
-                    stopPlayback()
+                setOnCompletionListener { if (it === player) stopPlayback() }
+                setOnErrorListener { failed, _, _ ->
+                    if (failed === player) stopPlayback()
                     true
                 }
             }
@@ -144,8 +175,14 @@ class AzanPlaybackService : Service() {
             stopPlayback()
             return
         }
-        runCatching { mediaPlayer.prepareAsync() }
-            .onFailure { stopPlayback() }
+        handler.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS)
+        mediaPlayer.prepareAsync()
+    }
+
+    private fun dispatchReminder(playing: Boolean) {
+        val reminder = pendingReminder
+        pendingReminder = null
+        reminder?.invoke(playing)
     }
 
     private fun applyCurrentVolume(target: MediaPlayer? = player) {
@@ -156,7 +193,9 @@ class AzanPlaybackService : Service() {
     }
 
     private fun stopPlayback(stopService: Boolean = true) {
+        handler.removeCallbacks(prepareTimeout)
         handler.removeCallbacks(stopSafety)
+        dispatchReminder(playing = false)
         currentPlaybackIsPreview = false
 
         player?.let { mediaPlayer ->
@@ -233,13 +272,18 @@ class AzanPlaybackService : Service() {
         private const val EXTRA_PRAYER_NAME = "prayer_name"
         private const val EXTRA_PREVIEW = "preview"
         private const val EXTRA_SOURCE = "source"
+        private const val EXTRA_ZONE = "zone"
+        private const val EXTRA_PRAYER_TIME = "prayer_time"
+        private const val PREPARE_TIMEOUT_MS = 15_000L
         private const val MAX_PLAYBACK_MS = 10 * 60 * 1000L
 
-        fun start(context: Context, prayerName: String) {
+        fun start(context: Context, prayerName: String, prayerTime: String, zoneCode: String) {
             val intent = Intent(context, AzanPlaybackService::class.java)
                 .setAction(ACTION_PLAY)
                 .putExtra(EXTRA_PRAYER_NAME, prayerName)
                 .putExtra(EXTRA_PREVIEW, false)
+                .putExtra(EXTRA_PRAYER_TIME, prayerTime)
+                .putExtra(EXTRA_ZONE, zoneCode)
             ContextCompat.startForegroundService(context, intent)
         }
 
