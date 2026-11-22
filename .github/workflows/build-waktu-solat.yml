@@ -50,7 +50,10 @@ jobs:
           sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:?Android SDK unavailable}}"
           manager="$(command -v sdkmanager || true)"
           manager="${manager:-$sdk/cmdline-tools/latest/bin/sdkmanager}"
-          packages="$("$manager" --sdk_root="$sdk" --list)"
+          if ! packages="$("$manager" --sdk_root="$sdk" --list)"; then
+            echo "::error::Android SDK Manager could not list available packages."
+            exit 1
+          fi
           platform="$(awk -F'|' '
             $1 ~ /^[[:space:]]*platforms;android-37([.]0)?[[:space:]]*$/ {
               gsub(/[[:space:]]/, "", $1)
@@ -80,11 +83,17 @@ jobs:
             export ANDROID_KEYSTORE_PATH
             ANDROID_KEYSTORE_PATH="$(mktemp "$RUNNER_TEMP/waktu-solat-keystore.XXXXXX")"
             trap 'rm -f -- "$ANDROID_KEYSTORE_PATH"' EXIT
-            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+            if ! printf '%s' "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"; then
+              echo "::error::RELEASE_KEYSTORE_BASE64 is not valid Base64. Encode the keystore file itself."
+              exit 1
+            fi
             export ANDROID_KEY_ALIAS=waktusolat
             export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
-            keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -alias "$ANDROID_KEY_ALIAS" \
-              -storepass:env ANDROID_KEYSTORE_PASSWORD >/dev/null
+            if ! keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -alias "$ANDROID_KEY_ALIAS" \
+              -storepass:env ANDROID_KEYSTORE_PASSWORD; then
+              echo "::error::Cannot open the signing keystore or find alias waktusolat. Check the keystore, password and alias."
+              exit 1
+            fi
             tasks+=(:app:assembleRelease :app:bundleRelease)
           elif (( signing_count != 0 )); then
             echo "::error::A signed release needs RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD."
@@ -156,15 +165,24 @@ jobs:
           fi
           code="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)[[:space:]]*$/\1/p' app/build.gradle.kts)"
           version="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"[[:space:]]*$/\1/p' app/build.gradle.kts)"
-          [[ "$code" =~ ^[1-9][0-9]*$ && "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          current="$(jq -er '.versionCode | select(type == "number")' update.json)"
+          if [[ ! "$code" =~ ^[1-9][0-9]*$ || ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Could not read a valid versionCode and versionName (x.y.z) from app/build.gradle.kts."
+            exit 1
+          fi
+          if ! current="$(jq -er '.versionCode | select(type == "number" and . >= 0 and . == floor)' update.json)"; then
+            echo "::error::update.json must contain a non-negative integer versionCode."
+            exit 1
+          fi
           if (( code <= current )); then
             echo "::notice::This version is already published or superseded."
             exit 0
           fi
 
           apk=dist/WaktuSolat-release.apk
-          test -s "$apk"
+          if [[ ! -s "$apk" ]]; then
+            echo "::error::The signed APK is missing from the build artifact."
+            exit 1
+          fi
           tag="v$version"
           asset="WaktuSolat-$version.apk"
           title="Waktu Solat & Kiblat $version"
@@ -175,8 +193,11 @@ jobs:
           else
             gh release create "$tag" --target "$SOURCE_SHA" --title "$title" --generate-notes "dist/$asset"
           fi
-          gh release view "$tag" --json isDraft,assets | jq -e --arg name "$asset" \
-            '.isDraft == false and any(.assets[]; .name == $name)' >/dev/null
+          if ! gh release view "$tag" --json isDraft,assets | jq -e --arg name "$asset" \
+            '.isDraft == false and any(.assets[]; .name == $name)' >/dev/null; then
+            echo "::error::GitHub Release $tag is a draft, unavailable, or missing $asset."
+            exit 1
+          fi
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$asset"
           hash="$(sha256sum "$apk" | cut -d' ' -f1)"
           jq -n --argjson versionCode "$code" --arg versionName "$version" \
