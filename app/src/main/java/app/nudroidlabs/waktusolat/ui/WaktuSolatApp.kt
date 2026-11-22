@@ -12,13 +12,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,7 +38,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import app.nudroidlabs.waktusolat.BuildConfig
@@ -88,11 +98,31 @@ private val LightColours = lightColorScheme(
     onSurface = Color(0xFF14201B)
 )
 
-enum class AppTab(val label: String, val shortLabel: String) {
-    HOME("Utama", "U"),
-    DOA("Doa", "D"),
-    QIBLA("Kiblat", "K"),
-    SETTINGS("Tetapan", "T")
+enum class AppTab(val label: String, val iconPath: String) {
+    HOME("Utama", "M3,11 L12,3 L21,11 V21 H15 V15 H9 V21 H3 Z"),
+    DOA(
+        "Doa",
+        "M12,6 C9,3 5,3 2,5 V19 C5,17 9,17 12,20 C15,17 19,17 22,19 V5 C19,3 15,3 12,6 Z M12,6 V20"
+    ),
+    QIBLA(
+        "Kiblat",
+        "M12,2 A10,10 0,1 1,12 22 A10,10 0,1 1,12 2 Z M16.5,7.5 L14,14 L7.5,16.5 L10,10 Z"
+    ),
+    SETTINGS(
+        "Tetapan",
+        "M10,2 H14 L14.6,4.6 L16.4,5.6 L19,4.8 L21,8.2 L19.2,10.1 V13.9 L21,15.8 L19,19.2 L16.4,18.4 L14.6,19.4 L14,22 H10 L9.4,19.4 L7.6,18.4 L5,19.2 L3,15.8 L4.8,13.9 V10.1 L3,8.2 L5,4.8 L7.6,5.6 L9.4,4.6 Z M12,9 A3,3 0,1 1,12 15 A3,3 0,1 1,12 9 Z"
+    )
+}
+
+@Composable
+private fun AppTabIcon(tab: AppTab) {
+    val path = remember(tab) { PathParser().parsePathString(tab.iconPath).toPath() }
+    val tint = LocalContentColor.current
+    Canvas(Modifier.size(24.dp)) {
+        scale(size.width / 24f, size.height / 24f, pivot = androidx.compose.ui.geometry.Offset.Zero) {
+            drawPath(path, tint, style = Stroke(width = 1.7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
 }
 
 @Composable
@@ -662,8 +692,15 @@ private fun PrayerAppShell(
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { tab = item },
-                        icon = { Text(item.shortLabel, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-                        label = { Text(item.label) }
+                        icon = { AppTabIcon(item) },
+                        label = { Text(item.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurface,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
                 }
             }

@@ -1,5 +1,6 @@
 package app.nudroidlabs.waktusolat.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,7 +35,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nudroidlabs.waktusolat.data.JakimZones
@@ -83,20 +88,38 @@ fun HomeScreen(
     }
     val upcoming = data?.let { PrayerTimeEngine.findUpcoming(it.days, now) }
     val zone = JakimZones.byCode(zoneCode)
+    val accent = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Column {
-                Text("Waktu Solat & Kiblat", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    now.format(dateFormatter),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
-                    fontSize = 13.sp
+            Row(
+                modifier = Modifier.padding(end = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_launcher_monochrome),
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(66.dp)
                 )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Waktu Solat",
+                        fontSize = 25.sp,
+                        lineHeight = 30.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(now.format(dateFormatter), color = muted, fontSize = 13.sp, lineHeight = 17.sp)
+                    today?.let {
+                        Text(formatHomeHijri(it.hijri), color = muted, fontSize = 13.sp, lineHeight = 17.sp)
+                    }
+                }
             }
         }
 
@@ -107,7 +130,7 @@ fun HomeScreen(
                 color = MaterialTheme.colorScheme.surface
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -115,39 +138,20 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .clickable(onClick = onChooseZone)
-                            .padding(vertical = 2.dp)
+                            .padding(vertical = 4.dp)
                     ) {
-                        Text(
-                            "${zone.state} · $zoneCode",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            zone.area,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(zone.area, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(zoneCode, color = muted, fontSize = 12.sp)
                     }
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Tukar",
-                            modifier = Modifier
-                                .clickable(onClick = onChooseZone)
-                                .padding(horizontal = 6.dp, vertical = 8.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onChooseZone) {
+                            Text("Tukar", fontWeight = FontWeight.SemiBold)
+                        }
                         IconButton(
                             onClick = onDetectLocation,
                             enabled = !detectingLocation,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             if (detectingLocation) {
                                 CircularProgressIndicator(
@@ -179,48 +183,55 @@ fun HomeScreen(
 
         if (upcoming != null) {
             item {
-                Card(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                    )
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.5.dp, accent)
                 ) {
-                    Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
-                        Text(
-                            "SOLAT SETERUSNYA",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Text("Solat seterusnya", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(5.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Bottom
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(upcoming.name, fontSize = 31.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                upcoming.name,
+                                modifier = Modifier.weight(1f),
+                                color = accent,
+                                fontSize = 29.sp,
+                                lineHeight = 34.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            VerticalDivider(
+                                modifier = Modifier.height(28.dp),
+                                thickness = 1.dp,
+                                color = accent
+                            )
                             Text(
                                 PrayerTimeDisplayFormatter.formatLocalTime(
                                     upcoming.target.toLocalTime(),
                                     timeFormatMode
                                 ),
-                                fontSize = 22.sp,
+                                modifier = Modifier.weight(1f),
+                                style = TabularTimeStyle,
+                                textAlign = TextAlign.End,
+                                color = accent,
+                                fontSize = 29.sp,
+                                lineHeight = 34.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Spacer(Modifier.height(7.dp))
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
-                        ) {
-                            Text(
-                                "Lagi ${PrayerTimeEngine.countdown(upcoming.target, now)}",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Lagi ${PrayerTimeEngine.countdown(upcoming.target, now)}",
+                            modifier = Modifier.fillMaxWidth(),
+                            style = TabularTimeStyle,
+                            textAlign = TextAlign.Center,
+                            fontSize = 15.sp
+                        )
                     }
                 }
             }
@@ -261,7 +272,7 @@ fun HomeScreen(
                 PrayerTimesCard(
                     day = today,
                     title = "Waktu hari ini",
-                    highlightedPrayer = upcoming?.name,
+                    highlightedPrayer = upcoming?.takeIf { it.target.toLocalDate() == now.toLocalDate() }?.name,
                     timeFormatMode = timeFormatMode
                 )
             }
@@ -283,6 +294,23 @@ fun HomeScreen(
         }
     }
 }
+
+private val HijriMonths = listOf(
+    "Muharam", "Safar", "Rabiulawal", "Rabiulakhir", "Jamadilawal", "Jamadilakhir",
+    "Rejab", "Syaaban", "Ramadan", "Syawal", "Zulkaedah", "Zulhijah"
+)
+
+private fun formatHomeHijri(raw: String): String {
+    val parts = raw.split('-')
+    if (parts.size != 3) return "Hijrah $raw"
+    val year = parts[0].toIntOrNull() ?: return "Hijrah $raw"
+    val month = parts[1].toIntOrNull()?.let { HijriMonths.getOrNull(it - 1) }
+        ?: return "Hijrah $raw"
+    val day = parts[2].toIntOrNull()?.takeIf { it in 1..30 } ?: return "Hijrah $raw"
+    return "$day $month ${year}H"
+}
+
+internal val TabularTimeStyle = TextStyle(fontFeatureSettings = "tnum")
 
 @Composable
 private fun DataStatusCard(

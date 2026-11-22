@@ -67,69 +67,55 @@ fun PrayerTimesCard(
         )
     }
 
+    val colours = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colours.surface)
     ) {
-        Column(Modifier.padding(18.dp)) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
             Text(
                 title,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
+                modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 8.dp),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold
             )
-            Text(day.dateRaw, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("Hijrah ${day.hijri}", fontSize = 13.sp)
-            Spacer(Modifier.height(14.dp))
-
-            rows.chunked(2).forEachIndexed { pairIndex, pair ->
+            rows.forEach { (name, raw) ->
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    color = colours.onSurface.copy(alpha = 0.18f)
+                )
+                val highlighted = name == highlightedPrayer
+                val textColour = if (highlighted) colours.primary else colours.onSurface
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    pair.forEach { (name, raw) ->
-                        PrayerTimeCell(
-                            modifier = Modifier.weight(1f),
-                            name = name,
-                            time = PrayerTimeDisplayFormatter.formatApiTime(raw, timeFormatMode),
-                            highlighted = name == highlightedPrayer
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (highlighted) colours.primary.copy(alpha = 0.16f) else Color.Transparent,
+                            RoundedCornerShape(8.dp)
                         )
-                    }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        name,
+                        modifier = Modifier.weight(1f),
+                        color = textColour,
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                    Text(
+                        PrayerTimeDisplayFormatter.formatApiTime(raw, timeFormatMode),
+                        style = TabularTimeStyle,
+                        color = textColour,
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
-                if (pairIndex != rows.chunked(2).lastIndex) Spacer(Modifier.height(10.dp))
             }
-        }
-    }
-}
-
-@Composable
-private fun PrayerTimeCell(
-    modifier: Modifier,
-    name: String,
-    time: String,
-    highlighted: Boolean
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = if (highlighted) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-        }
-    ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Text(
-                name,
-                fontSize = 12.sp,
-                color = if (highlighted) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
-                }
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(time, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
