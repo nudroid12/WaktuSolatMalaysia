@@ -11,11 +11,6 @@ on:
       - 'gradle/wrapper/**'
       - 'gradlew*'
   workflow_dispatch:
-    inputs:
-      publish_update:
-        description: Publish signed APK and activate in-app update
-        type: boolean
-        default: false
   workflow_run:
     workflows: [Apply Waktu Solat ZIP Patch]
     types: [completed]
@@ -35,6 +30,9 @@ jobs:
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[zip-applied]'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    outputs:
+      signed: ${{ steps.apk.outputs.signed }}
+      source_sha: ${{ steps.apk.outputs.source_sha }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -65,9 +63,9 @@ jobs:
           fi
           "$manager" --sdk_root="$sdk" --install "$platform" 'build-tools;36.0.0'
       - name: Test and build APKs
+        id: apk
         shell: bash
         env:
-          PUBLISH_UPDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_update }}
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
         run: |
@@ -88,7 +86,7 @@ jobs:
             keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -alias "$ANDROID_KEY_ALIAS" \
               -storepass:env ANDROID_KEYSTORE_PASSWORD >/dev/null
             tasks+=(:app:assembleRelease :app:bundleRelease)
-          elif (( signing_count != 0 )) || [[ "$PUBLISH_UPDATE" == true ]]; then
+          elif (( signing_count != 0 )); then
             echo "::error::A signed release needs RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD."
             exit 1
           fi
@@ -105,6 +103,10 @@ jobs:
             "$sdk/build-tools/36.0.0/apksigner" verify "$apk"
           fi
           (cd dist && sha256sum -- *.apk > SHA256SUMS.txt)
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if (( signing_count == 2 )); then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: WaktuSolat-Android
@@ -119,7 +121,7 @@ jobs:
 
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_update && github.ref == 'refs/heads/main'
+    if: needs.build.outputs.signed == 'true' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -127,7 +129,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.build.outputs.source_sha }}
       - uses: actions/download-artifact@v4
         with:
           name: WaktuSolat-Android
@@ -135,6 +137,7 @@ jobs:
       - name: Publish release and update metadata
         shell: bash
         env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -147,7 +150,7 @@ jobs:
           fi
 
           git fetch origin main
-          if [[ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]]; then
+          if [[ "$(git rev-parse FETCH_HEAD)" != "$SOURCE_SHA" ]]; then
             echo "::error::main changed while this APK was building. Run Publish again from the latest main."
             exit 1
           fi
@@ -156,8 +159,8 @@ jobs:
           [[ "$code" =~ ^[1-9][0-9]*$ && "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           current="$(jq -er '.versionCode | select(type == "number")' update.json)"
           if (( code <= current )); then
-            echo "::error::Increase app versionCode above the currently published update version."
-            exit 1
+            echo "::notice::This version is already published or superseded."
+            exit 0
           fi
 
           apk=dist/WaktuSolat-release.apk
@@ -170,7 +173,7 @@ jobs:
             gh release download "$tag" --pattern "$asset" --output dist/published.apk
             cmp "$apk" dist/published.apk
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --generate-notes "dist/$asset"
+            gh release create "$tag" --target "$SOURCE_SHA" --title "$title" --generate-notes "dist/$asset"
           fi
           gh release view "$tag" --json isDraft,assets | jq -e --arg name "$asset" \
             '.isDraft == false and any(.assets[]; .name == $name)' >/dev/null
