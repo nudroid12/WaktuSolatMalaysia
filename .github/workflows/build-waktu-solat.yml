@@ -1,220 +1,152 @@
 name: Build Waktu Solat APK
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'app/**'
-      - 'settings.gradle.kts'
-      - 'build.gradle.kts'
-      - 'gradle.properties'
-      - 'gradle/wrapper/**'
-      - 'gradlew*'
   workflow_dispatch:
   workflow_run:
     workflows: [Apply Waktu Solat ZIP Patch]
     types: [completed]
     branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradle/wrapper/**'
+      - 'gradlew*'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: waktu-solat-build-${{ github.ref }}
+  group: waktu-solat-release
   cancel-in-progress: false
 
 jobs:
-  build:
+  release:
     if: >-
+      github.ref == 'refs/heads/main' &&
       (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[zip-applied]'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    outputs:
-      signed: ${{ steps.apk.outputs.signed }}
-      source_sha: ${{ steps.apk.outputs.source_sha }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.sha }}
-          persist-credentials: false
+          ref: main
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v6
+
       - name: Install Android SDK
         shell: bash
         run: |
           set -euo pipefail
-          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:?Android SDK unavailable}}"
-          manager="$(command -v sdkmanager || true)"
-          manager="${manager:-$sdk/cmdline-tools/latest/bin/sdkmanager}"
-          if ! packages="$("$manager" --sdk_root="$sdk" --list)"; then
-            echo "::error::Android SDK Manager could not list available packages."
-            exit 1
-          fi
-          platform="$(awk -F'|' '
-            $1 ~ /^[[:space:]]*platforms;android-37([.]0)?[[:space:]]*$/ {
-              gsub(/[[:space:]]/, "", $1)
-              print $1
-              exit
-            }' <<< "$packages")"
+          packages="$(sdkmanager --list)"
+          platform="$(awk -F'|' '$1 ~ /^[[:space:]]*platforms;android-37([.]0)?[[:space:]]*$/ {
+            gsub(/[[:space:]]/, "", $1); print $1; exit
+          }' <<< "$packages")"
           if [[ -z "$platform" ]]; then
-            echo "::error::Android SDK 37 is required by app/build.gradle.kts and is unavailable."
+            echo "::error::Android SDK 37 is unavailable."
             exit 1
           fi
-          "$manager" --sdk_root="$sdk" --install "$platform" 'build-tools;36.0.0'
-      - name: Test and build APKs
-        id: apk
+          sdkmanager --install "$platform" 'build-tools;36.0.0'
+
+      - name: Build signed APK
         shell: bash
         env:
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
-          signing_count=0
-          for value in "$KEYSTORE_B64" "$ANDROID_KEYSTORE_PASSWORD"; do
-            if [[ -n "$value" ]]; then (( signing_count += 1 )); fi
-          done
-          tasks=(:app:testDebugUnitTest :app:assembleDebug)
-          if (( signing_count == 2 )); then
-            umask 077
-            export ANDROID_KEYSTORE_PATH
-            ANDROID_KEYSTORE_PATH="$(mktemp "$RUNNER_TEMP/waktu-solat-keystore.XXXXXX")"
-            trap 'rm -f -- "$ANDROID_KEYSTORE_PATH"' EXIT
-            if ! printf '%s' "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"; then
-              echo "::error::RELEASE_KEYSTORE_BASE64 is not valid Base64. Encode the keystore file itself."
-              exit 1
-            fi
-            if ! entries="$(keytool -J-Duser.language=en -J-Duser.country=US -list -v \
-              -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD)"; then
-              echo "::error::Cannot open the signing keystore. Check the file and keystore password."
-              exit 1
-            fi
-            mapfile -t aliases < <(awk '
-              /^Alias name: / { alias = substr($0, length("Alias name: ") + 1) }
-              /^Entry type: PrivateKeyEntry$/ { print alias }
-            ' <<< "$entries")
-            if (( ${#aliases[@]} != 1 )); then
-              echo "::error::Expected exactly one signing key in the keystore, found ${#aliases[@]}. Use a keystore containing only the app signing key."
-              exit 1
-            fi
-            export ANDROID_KEY_ALIAS="${aliases[0]}"
-            export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
-            unset entries aliases
-            tasks+=(:app:assembleRelease :app:bundleRelease)
-          elif (( signing_count != 0 )); then
-            echo "::error::A signed release needs RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD."
+          if [[ -z "$KEYSTORE_B64" || -z "$ANDROID_KEYSTORE_PASSWORD" ]]; then
+            echo "::error::Set RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD."
             exit 1
           fi
-          unset KEYSTORE_B64 value
-          ./gradlew "${tasks[@]}" --stacktrace
 
-          mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/WaktuSolat-debug.apk
-          if (( signing_count == 2 )); then
-            apk=dist/WaktuSolat-release.apk
-            cp app/build/outputs/apk/release/app-release.apk "$apk"
-            cp app/build/outputs/bundle/release/app-release.aab dist/WaktuSolat-release.aab
-            sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:?Android SDK unavailable}}"
-            "$sdk/build-tools/36.0.0/apksigner" verify "$apk"
+          export ANDROID_KEYSTORE_PATH
+          ANDROID_KEYSTORE_PATH="$(mktemp "$RUNNER_TEMP/waktu-solat-keystore.XXXXXX")"
+          trap 'rm -f -- "$ANDROID_KEYSTORE_PATH"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          unset KEYSTORE_B64
+
+          if ! entries="$(keytool -J-Duser.language=en -J-Duser.country=US -list -v \
+            -keystore "$ANDROID_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD)"; then
+            echo "::error::Cannot read the signing keystore. Check the file and password."
+            exit 1
           fi
-          (cd dist && sha256sum -- *.apk > SHA256SUMS.txt)
-          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          if (( signing_count == 2 )); then
-            echo "signed=true" >> "$GITHUB_OUTPUT"
+          mapfile -t aliases < <(awk '
+            /^Alias name: / { alias = substr($0, length("Alias name: ") + 1) }
+            /^Entry type: PrivateKeyEntry$/ { print alias }
+          ' <<< "$entries")
+          if (( ${#aliases[@]} != 1 )); then
+            echo "::error::The keystore must contain exactly one signing key."
+            exit 1
           fi
+          export ANDROID_KEY_ALIAS="${aliases[0]}"
+          export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease --stacktrace
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify app/build/outputs/apk/release/app-release.apk
+
       - uses: actions/upload-artifact@v4
         with:
-          name: WaktuSolat-Android
-          path: dist/
+          name: WaktuSolat-APK
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: WaktuSolat-Unit-Tests
-          path: app/build/test-results/testDebugUnitTest/
-          if-no-files-found: ignore
 
-
-  publish:
-    if: needs.build.outputs.signed == 'true' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.build.outputs.source_sha }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: WaktuSolat-Android
-          path: dist
-      - name: Publish release and update metadata
+      - name: Publish APK and update.json
         shell: bash
         env:
-          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # The installed app reads update.json from this repository's main branch.
-          expected_repo="$(sed -nE 's|.*raw.githubusercontent.com/([^/]*/[^/]*)/main/update.json".*|\1|p' \
-            app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt)"
-          if [[ "${GITHUB_REPOSITORY,,}" != "${expected_repo,,}" ]]; then
-            echo "::error::This repository does not match the update URL in the installed app."
-            exit 1
-          fi
-
-          git fetch origin main
-          if [[ "$(git rev-parse FETCH_HEAD)" != "$SOURCE_SHA" ]]; then
-            echo "::error::main changed while this APK was building. Run Publish again from the latest main."
-            exit 1
-          fi
           code="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)[[:space:]]*$/\1/p' app/build.gradle.kts)"
           version="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"[[:space:]]*$/\1/p' app/build.gradle.kts)"
+          current="$(jq -er '.versionCode | select(type == "number" and . >= 0 and . == floor)' update.json)"
           if [[ ! "$code" =~ ^[1-9][0-9]*$ || ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Could not read a valid versionCode and versionName (x.y.z) from app/build.gradle.kts."
-            exit 1
-          fi
-          if ! current="$(jq -er '.versionCode | select(type == "number" and . >= 0 and . == floor)' update.json)"; then
-            echo "::error::update.json must contain a non-negative integer versionCode."
+            echo "::error::Expected a numeric versionCode and an x.y.z versionName."
             exit 1
           fi
           if (( code <= current )); then
-            echo "::notice::This version is already published or superseded."
+            echo "Version $version is already published or superseded."
             exit 0
           fi
 
-          apk=dist/WaktuSolat-release.apk
-          if [[ ! -s "$apk" ]]; then
-            echo "::error::The signed APK is missing from the build artifact."
+          git fetch origin main
+          commit="$(git rev-parse HEAD)"
+          if [[ "$(git rev-parse FETCH_HEAD)" != "$commit" ]]; then
+            echo "::error::main changed during the build. Run the workflow again."
             exit 1
           fi
+
           tag="v$version"
           asset="WaktuSolat-$version.apk"
+          apk="$RUNNER_TEMP/$asset"
           title="Waktu Solat & Kiblat $version"
-          cp "$apk" "dist/$asset"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release download "$tag" --pattern "$asset" --output dist/published.apk
-            cmp "$apk" dist/published.apk
+            gh release download "$tag" --pattern "$asset" --output "$RUNNER_TEMP/published.apk"
+            if ! cmp -s "$apk" "$RUNNER_TEMP/published.apk"; then
+              echo "::error::Release $tag already contains a different APK. Bump versionName and versionCode."
+              exit 1
+            fi
           else
-            gh release create "$tag" --target "$SOURCE_SHA" --title "$title" --generate-notes "dist/$asset"
+            gh release create "$tag" "$apk" --target "$commit" --title "$title" --notes "$title"
           fi
-          if ! gh release view "$tag" --json isDraft,assets | jq -e --arg name "$asset" \
-            '.isDraft == false and any(.assets[]; .name == $name)' >/dev/null; then
-            echo "::error::GitHub Release $tag is a draft, unavailable, or missing $asset."
-            exit 1
-          fi
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$asset"
+          gh release view "$tag" --json isDraft --jq '.isDraft' | grep -qx false
+
           hash="$(sha256sum "$apk" | cut -d' ' -f1)"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$asset"
           jq -n --argjson versionCode "$code" --arg versionName "$version" \
             --arg apkUrl "$url" --arg sha256 "$hash" --arg releaseNotes "$title" \
             '{versionCode: $versionCode, versionName: $versionName, apkUrl: $apkUrl, sha256: $sha256, releaseNotes: $releaseNotes}' \
             > update.json
-          git add -- update.json
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add update.json
           git commit -m "Publish app update $version"
-          git push origin HEAD:refs/heads/main
+          git push origin HEAD:main
