@@ -1,0 +1,79 @@
+name: Apply Waktu Solat ZIP Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'WaktuSolatMalaysia-*-Patch.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: waktu-solat-apply-zip
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Validate, apply and commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          patches=(WaktuSolatMalaysia-*-Patch.zip)
+          if (( ${#patches[@]} != 1 )); then
+            echo "::error::Place exactly one WaktuSolatMalaysia-*-Patch.zip in the repository root."
+            exit 1
+          fi
+          patch="${patches[0]}"
+          [[ -f "$patch" && ! -L "$patch" ]]
+          python3 - "$patch" <<'PYTHON'
+          import stat
+          import subprocess
+          import sys
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+
+          tracked = set(subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0"))
+          with ZipFile(sys.argv[1]) as archive:
+              entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+              if not entries or sum(entry.file_size for entry in entries) > 100 * 1024 * 1024:
+                  raise SystemExit("Empty patch or patch exceeds 100 MiB uncompressed.")
+
+              seen = set()
+              for entry in entries:
+                  raw = entry.filename
+                  path = PurePosixPath(raw)
+                  allowed = raw in {"app/build.gradle.kts", "app/proguard-rules.pro"} or (
+                      path.parts[:3] in {("app", "src", "main"), ("app", "src", "test")}
+                  )
+                  destination = Path(raw)
+                  if (
+                      not allowed or raw not in tracked or path.as_posix() != raw
+                      or ".." in path.parts or "\\" in raw or raw in seen
+                      or stat.S_ISLNK(entry.external_attr >> 16)
+                      or any(part.is_symlink() for part in (destination, *destination.parents))
+                      or not destination.is_file()
+                  ):
+                      raise SystemExit(f"Invalid patch entry: {raw!r}")
+                  seen.add(raw)
+
+              if archive.testzip() is not None:
+                  raise SystemExit("ZIP CRC validation failed.")
+              for entry in entries:
+                  Path(entry.filename).write_bytes(archive.read(entry))
+          PYTHON
+          git --literal-pathspecs rm -- "$patch"
+          git add --all -- app
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Apply Waktu Solat patch [zip-applied]'
+          git push origin HEAD:refs/heads/main
