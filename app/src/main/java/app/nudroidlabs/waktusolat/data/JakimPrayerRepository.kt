@@ -24,12 +24,10 @@ class JakimPrayerRepository(private val context: Context) {
     suspend fun loadWeek(zoneCode: String, forceRefresh: Boolean = false): Result<PrayerResponse> = withContext(Dispatchers.IO) {
         val cacheKey = "week_$zoneCode"
         if (!forceRefresh) {
-            prefs.getString(cacheKey, null)?.let { cached ->
-                val parsed = parseValidatedCache(cached, zoneCode, cacheKey)
-                if (parsed != null && isCacheFresh(zoneCode)) {
-                    lastOrigin = PrayerDataOrigin.CACHE_FRESH
-                    return@withContext Result.success(parsed)
-                }
+            val cached = loadUsableCache(zoneCode)
+            if (cached != null && isCacheFresh(zoneCode)) {
+                lastOrigin = PrayerDataOrigin.CACHE_FRESH
+                return@withContext Result.success(cached)
             }
         }
 
@@ -50,6 +48,9 @@ class JakimPrayerRepository(private val context: Context) {
                 val body = connection.inputStream.bufferedReader().use(BufferedReader::readText)
                 val parsed = parse(body)
                 PrayerDataValidator.validate(parsed, zoneCode)
+                require(PrayerDataValidator.isUsableForToday(parsed)) {
+                    "Jadual JAKIM tidak meliputi tarikh hari ini."
+                }
                 prefs.edit {
                     putString(cacheKey, body)
                     putLong("${cacheKey}_saved", System.currentTimeMillis())
@@ -64,13 +65,21 @@ class JakimPrayerRepository(private val context: Context) {
             val parsed = parseValidatedCache(cached, zoneCode, cacheKey) ?: throw networkError
             if (!PrayerDataValidator.isUsableForToday(parsed)) {
                 throw IllegalStateException(
-                    "Data cache sudah tamat tempoh dan tidak lagi meliputi tarikh semasa.",
+                    "Jadual tersimpan tiada tarikh hari ini. Ralat JAKIM: " +
+                        (networkError.message ?: networkError.javaClass.simpleName),
                     networkError
                 )
             }
             lastOrigin = PrayerDataOrigin.CACHE_FALLBACK
             parsed
         }
+    }
+
+    fun loadUsableCache(zoneCode: String): PrayerResponse? {
+        val cacheKey = "week_$zoneCode"
+        val raw = prefs.getString(cacheKey, null) ?: return null
+        return parseValidatedCache(raw, zoneCode, cacheKey)
+            ?.takeIf { PrayerDataValidator.isUsableForToday(it) }
     }
 
     private fun parseValidatedCache(

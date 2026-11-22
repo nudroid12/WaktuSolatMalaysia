@@ -9,6 +9,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import app.nudroidlabs.waktusolat.MainActivity
 import app.nudroidlabs.waktusolat.R
+import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
 import app.nudroidlabs.waktusolat.audio.AzanPlaybackService
 import app.nudroidlabs.waktusolat.audio.AzanPreferences
 
@@ -23,6 +24,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val zoneCode = intent.getStringExtra(PrayerAlarmScheduler.EXTRA_ZONE_CODE)
             ?.takeIf(String::isNotBlank)
             ?: return
+        if (zoneCode != JakimPrayerRepository(context).savedZone()) return
         val kind = intent.getStringExtra(PrayerAlarmScheduler.EXTRA_KIND)
             ?: PrayerAlarmScheduler.KIND_ENTRY
         val leadMinutes = intent.getIntExtra(PrayerAlarmScheduler.EXTRA_LEAD_MINUTES, 0)
@@ -36,7 +38,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             PrayerAlarmScheduler.canScheduleExact(context) &&
             AzanPreferences.enabledForPrayer(context, prayerName)
 
-        if (!canPostNotification && !canPlayAzan) return
+        val azanStarted = canPlayAzan &&
+            runCatching { AzanPlaybackService.start(context, prayerName) }.isSuccess
 
         if (canPostNotification) {
             PrayerAlarmScheduler.createNotificationChannels(context)
@@ -60,7 +63,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 "$prayerName masuk pada $prayerTime · Zon $zoneCode"
             }
 
-            val channelId = PrayerAlarmScheduler.channelFor(context, canPlayAzan)
+            val channelId = PrayerAlarmScheduler.channelFor(context, azanStarted)
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
@@ -72,10 +75,10 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 .setContentIntent(openApp)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setSilent(
-                    canPlayAzan || PrayerAlarmScheduler.alertStyle(context) == PrayerAlertStyle.SILENT
+                    azanStarted || PrayerAlarmScheduler.alertStyle(context) == PrayerAlertStyle.SILENT
                 )
 
-            if (canPlayAzan) {
+            if (azanStarted) {
                 builder.addAction(0, "Henti azan", AzanPlaybackService.stopPendingIntent(context))
             }
 
@@ -88,13 +91,10 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                     builder = builder
                 )
             } catch (_: SecurityException) {
-                if (!canPlayAzan) return
+                // Notification permission may have changed.
             }
         }
 
-        if (canPlayAzan) {
-            runCatching { AzanPlaybackService.start(context, prayerName) }
-        }
     }
     @SuppressLint("MissingPermission")
     private fun postNotification(

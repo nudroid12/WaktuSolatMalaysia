@@ -48,6 +48,10 @@ import app.nudroidlabs.waktusolat.audio.AzanPreferences
 import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
 import app.nudroidlabs.waktusolat.data.PrayerDataOrigin
 import app.nudroidlabs.waktusolat.data.PrayerResponse
+import app.nudroidlabs.waktusolat.data.PrayerDataValidator
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlinx.coroutines.delay
 import app.nudroidlabs.waktusolat.data.TimeFormatMode
 import app.nudroidlabs.waktusolat.data.TimeFormatPreferences
 import app.nudroidlabs.waktusolat.location.LocationZoneDetector
@@ -240,9 +244,14 @@ private fun PrayerAppShell(
     }
 
     fun setZone(code: String) {
+        if (code == zoneCode) {
+            reloadNonce++
+            zoneSuggestion = null
+            return
+        }
+        repository.saveZone(code)
         PrayerAlarmScheduler.cancelAll(appContext)
         zoneCode = code
-        repository.saveZone(code)
         data = null
         dataOrigin = null
         cacheSavedAt = repository.cacheSavedAt(code)
@@ -465,7 +474,20 @@ private fun PrayerAppShell(
             }
     }
 
-    LaunchedEffect(zoneCode, reloadNonce, resumeToken) {
+    val malaysiaZone = remember { ZoneId.of("Asia/Kuala_Lumpur") }
+    var malaysiaDate by remember { mutableStateOf(LocalDate.now(malaysiaZone)) }
+    LaunchedEffect(malaysiaZone) {
+        while (true) {
+            malaysiaDate = LocalDate.now(malaysiaZone)
+            delay(1_000)
+        }
+    }
+
+    LaunchedEffect(zoneCode, reloadNonce, resumeToken, malaysiaDate) {
+        if (data?.let { PrayerDataValidator.isUsableForToday(it, malaysiaDate) } != true) {
+            data = null
+            dataOrigin = null
+        }
         loading = true
         error = null
         val forceRefresh = reloadNonce > lastHandledRefreshNonce

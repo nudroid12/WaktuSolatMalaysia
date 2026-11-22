@@ -32,11 +32,19 @@ object PrayerTimeEngine {
         "disember" to 12
     )
 
+    private val shortMonths = mapOf(
+        "jan" to 1, "feb" to 2, "mar" to 3, "apr" to 4,
+        "may" to 5, "jul" to 7, "aug" to 8, "ogo" to 8,
+        "sep" to 9, "oct" to 10, "okt" to 10, "nov" to 11,
+        "dec" to 12, "dis" to 12
+    )
+
     fun apiDate(raw: String): LocalDate? {
         val parts = raw.trim().split("-")
         if (parts.size != 3) return null
         val day = parts[0].toIntOrNull() ?: return null
-        val month = malayMonths[parts[1].lowercase(Locale.ROOT)] ?: return null
+        val monthName = parts[1].lowercase(Locale.ROOT)
+        val month = malayMonths[monthName] ?: shortMonths[monthName] ?: return null
         val year = parts[2].toIntOrNull() ?: return null
         return runCatching { LocalDate.of(year, month, day) }.getOrNull()
     }

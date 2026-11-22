@@ -1,5 +1,6 @@
 package app.nudroidlabs.waktusolat.ui
 
+import android.hardware.SensorManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import androidx.compose.foundation.Canvas
@@ -56,6 +57,7 @@ fun QiblaScreen(
 ) {
     val context = LocalContext.current
     var trueHeading by remember(location) { mutableStateOf<Float?>(null) }
+    var sensorAccurate by remember(location) { mutableStateOf(false) }
     var sensorAvailable by remember(location) { mutableStateOf(true) }
 
     val qiblaBearing = remember(location) {
@@ -70,7 +72,9 @@ fun QiblaScreen(
             sensorAvailable = true
             onDispose { }
         } else {
-            val sensor = QiblaSensor(context, location) { heading ->
+            val sensor = QiblaSensor(context, location, onSensorAccuracyChanged = { accuracy ->
+                sensorAccurate = accuracy >= SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM
+            }) { heading ->
                 trueHeading = heading
             }
             sensorAvailable = sensor.start()
@@ -124,7 +128,8 @@ fun QiblaScreen(
                 QiblaCompassCard(
                     qiblaBearing = qiblaBearing ?: 0.0,
                     trueHeading = trueHeading,
-                    sensorAvailable = sensorAvailable
+                    sensorAvailable = sensorAvailable,
+                        sensorAccurate = sensorAccurate
                 )
             }
 
@@ -177,7 +182,8 @@ fun QiblaScreen(
 private fun QiblaCompassCard(
     qiblaBearing: Double,
     trueHeading: Float?,
-    sensorAvailable: Boolean
+    sensorAvailable: Boolean,
+    sensorAccurate: Boolean
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -196,8 +202,8 @@ private fun QiblaCompassCard(
         }
     }
 
-    LaunchedEffect(relative) {
-        if (alignmentGate.shouldNotify(relative)) {
+    LaunchedEffect(relative, sensorAccurate) {
+        if (alignmentGate.shouldNotify(relative.takeIf { sensorAccurate })) {
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 260)
         }
     }

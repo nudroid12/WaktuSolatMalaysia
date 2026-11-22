@@ -14,10 +14,9 @@ import app.nudroidlabs.waktusolat.data.PrayerZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 data class ZoneSuggestion(
     val zone: PrayerZone,
@@ -47,7 +46,7 @@ class LocationZoneDetector(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     suspend fun detect(): Result<ZoneSuggestion> = runCatching {
-        val location = withTimeout(20_000L) { obtainLocation() }
+        val location = obtainLocation()
         saveLocation(location, null)
 
         val address = reverseGeocode(location)
@@ -117,12 +116,23 @@ class LocationZoneDetector(private val context: Context) {
 
         if (recent != null) return recent
 
-        val provider = when {
-            LocationManager.NETWORK_PROVIDER in enabledProviders -> LocationManager.NETWORK_PROVIDER
-            else -> LocationManager.GPS_PROVIDER
+        val providers = enabledProviders.sortedBy { it != LocationManager.NETWORK_PROVIDER }
+        for (provider in providers) {
+            val location = withTimeoutOrNull(20_000L / providers.size) {
+                try {
+                    getCurrentLocation(provider)
+                } catch (_: SecurityException) {
+                    null
+                }
+            }
+            if (location != null) return location
         }
+        error("Lokasi semasa tidak dapat diperoleh.")
+    }
 
-        return suspendCancellableCoroutine { continuation ->
+    @SuppressLint("MissingPermission")
+    private suspend fun getCurrentLocation(provider: String): Location? =
+        suspendCancellableCoroutine { continuation ->
             val signal = CancellationSignal()
             LocationManagerCompat.getCurrentLocation(
                 locationManager,
@@ -131,17 +141,10 @@ class LocationZoneDetector(private val context: Context) {
                 ContextCompat.getMainExecutor(context)
             ) { location ->
                 if (!continuation.isActive) return@getCurrentLocation
-                if (location != null) {
-                    continuation.resume(location)
-                } else {
-                    continuation.resumeWithException(
-                        IllegalStateException("Lokasi semasa tidak dapat diperoleh.")
-                    )
-                }
+                continuation.resume(location)
             }
             continuation.invokeOnCancellation { signal.cancel() }
         }
-    }
 
     @Suppress("DEPRECATION")
     private suspend fun reverseGeocode(location: Location): Address? = withContext(Dispatchers.IO) {

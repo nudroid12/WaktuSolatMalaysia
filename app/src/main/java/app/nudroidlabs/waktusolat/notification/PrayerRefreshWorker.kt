@@ -3,6 +3,8 @@ package app.nudroidlabs.waktusolat.notification
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequest
@@ -62,7 +64,19 @@ class PrayerRefreshWorker(
             )
         }
 
+        fun requestRefresh(context: Context) {
+            val request = OneTimeWorkRequest.Builder(PrayerRefreshWorker::class.java)
+                .setConstraints(
+                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+                )
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "${UNIQUE_WORK_NAME}_immediate", ExistingWorkPolicy.KEEP, request
+            )
+        }
+
         fun cancel(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork("${UNIQUE_WORK_NAME}_immediate")
             WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK_NAME)
         }
     }

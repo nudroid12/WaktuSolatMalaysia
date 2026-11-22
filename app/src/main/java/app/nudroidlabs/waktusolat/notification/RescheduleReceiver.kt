@@ -24,13 +24,14 @@ class RescheduleReceiver : BroadcastReceiver() {
 
                 val repository = JakimPrayerRepository(appContext)
                 val zoneCode = repository.savedZone()
-                repository.loadWeek(zoneCode).onSuccess { response ->
+                repository.loadUsableCache(zoneCode)?.let { response ->
                     PrayerAlarmScheduler.reschedule(
                         context = appContext,
                         days = response.days,
                         zoneCode = zoneCode
                     )
                 }
+                PrayerRefreshWorker.requestRefresh(appContext)
             } finally {
                 pendingResult.finish()
             }

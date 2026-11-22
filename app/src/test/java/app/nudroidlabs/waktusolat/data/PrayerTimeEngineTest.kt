@@ -13,6 +13,11 @@ class PrayerTimeEngineTest {
     }
 
     @Test
+    fun parsesAbbreviatedJakimDate() {
+        assertEquals(LocalDate.of(2026, 11, 22), PrayerTimeEngine.apiDate("22-Nov-2026"))
+    }
+
+    @Test
     fun findsNextPrayer() {
         val day = PrayerDay(
             hijri = "1448-02-28",

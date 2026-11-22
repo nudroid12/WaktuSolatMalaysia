@@ -54,8 +54,6 @@ object PrayerDataValidator {
         response: PrayerResponse,
         today: LocalDate = LocalDate.now(malaysiaZone)
     ): Boolean {
-        val dates = response.days.mapNotNull { PrayerTimeEngine.apiDate(it.dateRaw) }
-        if (dates.size != response.days.size || dates.isEmpty()) return false
-        return !today.isBefore(dates.first()) && !today.isAfter(dates.last())
+        return response.days.any { PrayerTimeEngine.apiDate(it.dateRaw) == today }
     }
 }

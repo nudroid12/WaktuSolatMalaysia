@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import app.nudroidlabs.waktusolat.audio.AzanPreferences
+import app.nudroidlabs.waktusolat.data.JakimPrayerRepository
 import app.nudroidlabs.waktusolat.data.PrayerDay
 import app.nudroidlabs.waktusolat.data.PrayerTimeDisplayFormatter
 import app.nudroidlabs.waktusolat.data.PrayerTimeEngine
@@ -170,15 +171,20 @@ object PrayerAlarmScheduler {
                     canScheduleExact(context)
                 )
 
+    @Synchronized
     fun reschedule(
         context: Context,
         days: List<PrayerDay>,
         zoneCode: String
     ): NotificationScheduleReport {
-        cancelAll(context)
+        if (JakimPrayerRepository(context).savedZone() != zoneCode) {
+            return NotificationScheduleReport(0, canScheduleExact(context))
+        }
+        val previousIds = scheduledIds(context)
         createNotificationChannels(context)
 
         if (!scheduleNeeded(context)) {
+            cancelAll(context)
             return NotificationScheduleReport(0, canScheduleExact(context))
         }
 
@@ -264,14 +270,21 @@ object PrayerAlarmScheduler {
             }
         }
 
+        cancelIds(context, previousIds - scheduledIds)
         prefs(context).edit { putStringSet(KEY_SCHEDULED_IDS, scheduledIds) }
         return NotificationScheduleReport(count, exactAvailable)
     }
 
+    @Synchronized
     fun cancelAll(context: Context) {
-        val stored = prefs(context).getStringSet(KEY_SCHEDULED_IDS, emptySet())
-            ?.toSet()
-            .orEmpty()
+        cancelIds(context, scheduledIds(context))
+        prefs(context).edit { remove(KEY_SCHEDULED_IDS) }
+    }
+
+    private fun scheduledIds(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_SCHEDULED_IDS, emptySet())?.toSet().orEmpty()
+
+    private fun cancelIds(context: Context, stored: Set<String>) {
 
         if (stored.isEmpty()) return
 
@@ -290,7 +303,6 @@ object PrayerAlarmScheduler {
             pending.cancel()
         }
 
-        prefs(context).edit { remove(KEY_SCHEDULED_IDS) }
     }
 
     private fun scheduleOne(
@@ -310,7 +322,7 @@ object PrayerAlarmScheduler {
             .atZone(malaysiaZone)
             .toInstant()
             .toEpochMilli()
-        if (triggerAtMillis <= nowMillis + 30_000L) return ScheduleOutcome.SKIPPED
+        if (triggerAtMillis <= nowMillis) return ScheduleOutcome.SKIPPED
 
         val pendingIntent = alarmPendingIntent(
             context = context,

@@ -125,6 +125,7 @@ class AzanPlaybackService : Service() {
 
         val mediaPlayer = runCatching {
             MediaPlayer().apply {
+                player = this
                 setAudioAttributes(attributes)
                 setDataSource(this@AzanPlaybackService, uri)
                 setOnPreparedListener {
@@ -143,8 +144,6 @@ class AzanPlaybackService : Service() {
             stopPlayback()
             return
         }
-        player = mediaPlayer
-
         runCatching { mediaPlayer.prepareAsync() }
             .onFailure { stopPlayback() }
     }

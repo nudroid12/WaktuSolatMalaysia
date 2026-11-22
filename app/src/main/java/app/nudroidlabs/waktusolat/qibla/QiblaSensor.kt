@@ -14,6 +14,7 @@ import kotlin.math.abs
 class QiblaSensor(
     context: Context,
     private val location: SavedLocation,
+    private val onSensorAccuracyChanged: (Int) -> Unit,
     private val onHeadingChanged: (Float) -> Unit
 ) : SensorEventListener {
     private val appContext = context.applicationContext
@@ -35,7 +36,9 @@ class QiblaSensor(
         sensorManager.unregisterListener(this)
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        if (sensor?.type == Sensor.TYPE_ROTATION_VECTOR) onSensorAccuracyChanged(accuracy)
+    }
 
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
