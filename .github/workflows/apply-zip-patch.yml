@@ -110,7 +110,7 @@ jobs:
           fi
           git --literal-pathspecs rm -- "$patch"
           git add --all -- app
-          git diff --cached --check
+          git -c core.whitespace=cr-at-eol diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Apply Waktu Solat patch [zip-applied]'
