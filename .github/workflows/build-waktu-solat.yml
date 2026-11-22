@@ -70,24 +70,26 @@ jobs:
           PUBLISH_UPDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_update }}
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           signing_count=0
-          for value in "$KEYSTORE_B64" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD"; do
+          for value in "$KEYSTORE_B64" "$ANDROID_KEYSTORE_PASSWORD"; do
             if [[ -n "$value" ]]; then (( signing_count += 1 )); fi
           done
           tasks=(:app:testDebugUnitTest :app:assembleDebug)
-          if (( signing_count == 4 )); then
+          if (( signing_count == 2 )); then
             umask 077
             export ANDROID_KEYSTORE_PATH
             ANDROID_KEYSTORE_PATH="$(mktemp "$RUNNER_TEMP/waktu-solat-keystore.XXXXXX")"
             trap 'rm -f -- "$ANDROID_KEYSTORE_PATH"' EXIT
             printf '%s' "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+            export ANDROID_KEY_ALIAS=waktusolat
+            export ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+            keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -alias "$ANDROID_KEY_ALIAS" \
+              -storepass:env ANDROID_KEYSTORE_PASSWORD >/dev/null
             tasks+=(:app:assembleRelease :app:bundleRelease)
           elif (( signing_count != 0 )) || [[ "$PUBLISH_UPDATE" == true ]]; then
-            echo "::error::A signed release needs all four RELEASE_* signing secrets."
+            echo "::error::A signed release needs RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD."
             exit 1
           fi
           unset KEYSTORE_B64 value
@@ -95,7 +97,7 @@ jobs:
 
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/WaktuSolat-debug.apk
-          if (( signing_count == 4 )); then
+          if (( signing_count == 2 )); then
             apk=dist/WaktuSolat-release.apk
             cp app/build/outputs/apk/release/app-release.apk "$apk"
             cp app/build/outputs/bundle/release/app-release.aab dist/WaktuSolat-release.aab
