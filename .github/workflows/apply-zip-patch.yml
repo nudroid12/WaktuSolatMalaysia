@@ -1,0 +1,117 @@
+name: Apply Waktu Solat ZIP Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'WaktuSolatMalaysia-*-Patch.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: waktu-solat-apply-zip
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      CAN_REMOVE_LEGACY_WORKFLOWS: ${{ secrets.PATCH_PUSH_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ secrets.PATCH_PUSH_TOKEN || github.token }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.4.1'
+      - name: Validate, apply and commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          patches=(WaktuSolatMalaysia-*-Patch.zip)
+          if (( ${#patches[@]} != 1 )); then
+            echo "::error::Place exactly one WaktuSolatMalaysia-*-Patch.zip in the repository root."
+            exit 1
+          fi
+          patch="${patches[0]}"
+          [[ -f "$patch" && ! -L "$patch" ]]
+          python3 - "$patch" <<'PYTHON'
+          import stat
+          import subprocess
+          import sys
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+
+          tracked = set(subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0"))
+          with ZipFile(sys.argv[1]) as archive:
+              entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+              if not entries or sum(entry.file_size for entry in entries) > 100 * 1024 * 1024:
+                  raise SystemExit("Empty patch or patch exceeds 100 MiB uncompressed.")
+
+              seen = set()
+              for entry in entries:
+                  raw = entry.filename
+                  path = PurePosixPath(raw)
+                  allowed = raw in {"app/build.gradle.kts", "app/proguard-rules.pro"} or (
+                      path.parts[:3] in {("app", "src", "main"), ("app", "src", "test")}
+                  )
+                  destination = Path(raw)
+                  if (
+                      not allowed or raw not in tracked or path.as_posix() != raw
+                      or ".." in path.parts or "\\" in raw or raw in seen
+                      or stat.S_ISLNK(entry.external_attr >> 16)
+                      or any(part.is_symlink() for part in (destination, *destination.parents))
+                      or not destination.is_file()
+                  ):
+                      raise SystemExit(f"Invalid patch entry: {raw!r}")
+                  seen.add(raw)
+
+              if archive.testzip() is not None:
+                  raise SystemExit("ZIP CRC validation failed.")
+              for entry in entries:
+                  Path(entry.filename).write_bytes(archive.read(entry))
+          PYTHON
+          if [[ ! -x gradlew || ! -f gradlew.bat ||
+                ! -s gradle/wrapper/gradle-wrapper.jar ||
+                ! -s gradle/wrapper/gradle-wrapper.properties ]]; then
+            wrapper_dir="$(mktemp -d)"
+            trap 'rm -rf -- "$wrapper_dir"' EXIT
+            printf '%s\n' 'rootProject.name = "wrapper-bootstrap"' > "$wrapper_dir/settings.gradle.kts"
+            gradle -p "$wrapper_dir" wrapper --gradle-version 9.4.1 --distribution-type bin
+            install -Dm755 "$wrapper_dir/gradlew" gradlew
+            install -Dm644 "$wrapper_dir/gradlew.bat" gradlew.bat
+            install -Dm644 "$wrapper_dir/gradle/wrapper/gradle-wrapper.jar" gradle/wrapper/gradle-wrapper.jar
+            install -Dm644 "$wrapper_dir/gradle/wrapper/gradle-wrapper.properties" gradle/wrapper/gradle-wrapper.properties
+            git add -f -- gradlew gradlew.bat gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties
+          fi
+
+          if [[ "$CAN_REMOVE_LEGACY_WORKFLOWS" == true ]]; then
+            git rm --ignore-unmatch -- \
+              .github/workflows/fix-sdk36-build.yml \
+              .github/workflows/m10-final-release-build-v2-cleanup.yml \
+              .github/workflows/m101-self-updater-build-v3.yml \
+              .github/workflows/m101-self-updater-build-v4.yml \
+              .github/workflows/m81-final-polish-build.yml \
+              .github/workflows/m82-final-polish-build.yml \
+              .github/workflows/m82-location-qibla-feedback-build.yml \
+              .github/workflows/m83-home-qibla-fix-build-v2.yml \
+              .github/workflows/m83-home-qibla-fix-build.yml
+          else
+            echo "::notice::Disable or remove the legacy build workflows manually, or configure PATCH_PUSH_TOKEN with workflow write access before applying."
+          fi
+          git --literal-pathspecs rm -- "$patch"
+          git add --all -- app
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Apply Waktu Solat patch [zip-applied]'
+          git push origin HEAD:refs/heads/main

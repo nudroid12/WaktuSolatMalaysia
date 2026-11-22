@@ -8,7 +8,14 @@ on:
       - 'settings.gradle.kts'
       - 'build.gradle.kts'
       - 'gradle.properties'
+      - 'gradle/wrapper/**'
+      - 'gradlew*'
   workflow_dispatch:
+    inputs:
+      publish_update:
+        description: Publish signed APK and activate in-app update
+        type: boolean
+        default: false
   workflow_run:
     workflows: [Apply Waktu Solat ZIP Patch]
     types: [completed]
@@ -23,7 +30,9 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[zip-applied]'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -36,8 +45,6 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '9.4.1'
       - name: Install Android SDK
         shell: bash
         run: |
@@ -60,6 +67,7 @@ jobs:
       - name: Test and build APKs
         shell: bash
         env:
+          PUBLISH_UPDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_update }}
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
@@ -78,12 +86,12 @@ jobs:
             trap 'rm -f -- "$ANDROID_KEYSTORE_PATH"' EXIT
             printf '%s' "$KEYSTORE_B64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
             tasks+=(:app:assembleRelease :app:bundleRelease)
-          elif (( signing_count != 0 )); then
-            echo "::error::Configure all four RELEASE_* signing secrets or leave all four unset for a debug build."
+          elif (( signing_count != 0 )) || [[ "$PUBLISH_UPDATE" == true ]]; then
+            echo "::error::A signed release needs all four RELEASE_* signing secrets."
             exit 1
           fi
           unset KEYSTORE_B64 value
-          gradle "${tasks[@]}" --stacktrace
+          ./gradlew "${tasks[@]}" --stacktrace
 
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/WaktuSolat-debug.apk
@@ -106,3 +114,72 @@ jobs:
           name: WaktuSolat-Unit-Tests
           path: app/build/test-results/testDebugUnitTest/
           if-no-files-found: ignore
+
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_update && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: WaktuSolat-Android
+          path: dist
+      - name: Publish release and update metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The installed app reads update.json from this repository's main branch.
+          expected_repo="$(sed -nE 's|.*raw.githubusercontent.com/([^/]*/[^/]*)/main/update.json".*|\1|p' \
+            app/src/main/java/app/nudroidlabs/waktusolat/update/AppUpdateManager.kt)"
+          if [[ "${GITHUB_REPOSITORY,,}" != "${expected_repo,,}" ]]; then
+            echo "::error::This repository does not match the update URL in the installed app."
+            exit 1
+          fi
+
+          git fetch origin main
+          if [[ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "::error::main changed while this APK was building. Run Publish again from the latest main."
+            exit 1
+          fi
+          code="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)[[:space:]]*$/\1/p' app/build.gradle.kts)"
+          version="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"[[:space:]]*$/\1/p' app/build.gradle.kts)"
+          [[ "$code" =~ ^[1-9][0-9]*$ && "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          current="$(jq -er '.versionCode | select(type == "number")' update.json)"
+          if (( code <= current )); then
+            echo "::error::Increase app versionCode above the currently published update version."
+            exit 1
+          fi
+
+          apk=dist/WaktuSolat-release.apk
+          test -s "$apk"
+          tag="v$version"
+          asset="WaktuSolat-$version.apk"
+          title="Waktu Solat & Kiblat $version"
+          cp "$apk" "dist/$asset"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release download "$tag" --pattern "$asset" --output dist/published.apk
+            cmp "$apk" dist/published.apk
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --generate-notes "dist/$asset"
+          fi
+          gh release view "$tag" --json isDraft,assets | jq -e --arg name "$asset" \
+            '.isDraft == false and any(.assets[]; .name == $name)' >/dev/null
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$asset"
+          hash="$(sha256sum "$apk" | cut -d' ' -f1)"
+          jq -n --argjson versionCode "$code" --arg versionName "$version" \
+            --arg apkUrl "$url" --arg sha256 "$hash" --arg releaseNotes "$title" \
+            '{versionCode: $versionCode, versionName: $versionName, apkUrl: $apkUrl, sha256: $sha256, releaseNotes: $releaseNotes}' \
+            > update.json
+          git add -- update.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "Publish app update $version"
+          git push origin HEAD:refs/heads/main
