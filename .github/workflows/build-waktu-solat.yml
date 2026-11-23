@@ -44,7 +44,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          packages="$(sdkmanager --list)"
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:?Android SDK unavailable}}"
+          manager="$(command -v sdkmanager || true)"
+          if [[ -z "$manager" ]]; then
+            for candidate in "$sdk"/cmdline-tools/{latest,*}/bin/sdkmanager; do
+              if [[ -x "$candidate" ]]; then
+                manager="$candidate"
+                break
+              fi
+            done
+          fi
+          if [[ -z "$manager" ]]; then
+            echo "::error::Android SDK command-line tools (sdkmanager) were not found."
+            exit 1
+          fi
+          packages="$("$manager" --sdk_root="$sdk" --list)"
           platform="$(awk -F'|' '$1 ~ /^[[:space:]]*platforms;android-37([.]0)?[[:space:]]*$/ {
             gsub(/[[:space:]]/, "", $1); print $1; exit
           }' <<< "$packages")"
@@ -52,7 +66,7 @@ jobs:
             echo "::error::Android SDK 37 is unavailable."
             exit 1
           fi
-          sdkmanager --install "$platform" 'build-tools;36.0.0'
+          "$manager" --sdk_root="$sdk" --install "$platform" 'build-tools;36.0.0'
 
       - name: Build signed APK
         shell: bash
